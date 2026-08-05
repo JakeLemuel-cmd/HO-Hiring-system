@@ -6,18 +6,22 @@ Deno.serve(async (req) => {
 
   try {
     const { user, profile } = await requireAdmin(req.headers.get("Authorization"));
-    const { firstName, lastName, email, role } = await req.json();
+    const { firstName, lastName, email, role, password } = await req.json();
 
-    if (!firstName || !lastName || !email || !role) {
-      return errorResponse("firstName, lastName, email, and role are required.");
+    if (!firstName || !lastName || !email || !role || !password) {
+      return errorResponse("firstName, lastName, email, role, and password are required.");
     }
     if (role !== "admin" && role !== "talent_acquisition") {
       return errorResponse("role must be admin or talent_acquisition.");
+    }
+    if (typeof password !== "string" || password.length < 6) {
+      return errorResponse("password must be at least 6 characters.");
     }
 
     const admin = adminClient();
     const { data: created, error: createError } = await admin.auth.admin.createUser({
       email,
+      password,
       email_confirm: true,
     });
     if (createError) throw createError;
@@ -31,8 +35,6 @@ Deno.serve(async (req) => {
       is_active: true,
     });
     if (profileError) throw profileError;
-
-    await admin.auth.resetPasswordForEmail(email);
 
     await admin.from("audit_logs").insert({
       user_id: user.id,

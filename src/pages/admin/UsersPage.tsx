@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { Eye, EyeOff, Plus } from "lucide-react";
 import { supabase, invokeFunction } from "@/lib/supabase";
 import { PageHeader } from "@/components/common/Misc";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import type { UserDocument, UserRole } from "@/types";
 
 function mapUser(row: any): UserDocument {
@@ -24,9 +26,15 @@ function mapUser(row: any): UserDocument {
   };
 }
 
+const EMPTY_FORM = { fullName: "", email: "", password: "", confirmPassword: "", role: "talent_acquisition" as UserRole };
+
 export function UsersPage() {
   const [users, setUsers] = useState<UserDocument[]>([]);
-  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", role: "talent_acquisition" as UserRole });
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
@@ -46,15 +54,48 @@ export function UsersPage() {
   };
   }, []);
 
+  function openDialog() {
+    setForm(EMPTY_FORM);
+    setFormError(null);
+    setShowPassword(false);
+    setShowConfirmPassword(false);
+    setOpen(true);
+  }
+
   async function createStaff(e: React.FormEvent) {
     e.preventDefault();
+    setFormError(null);
+
+    if (!form.fullName.trim()) {
+      setFormError("Name is required.");
+      return;
+    }
+    if (form.password.length < 6) {
+      setFormError("Password must be at least 6 characters.");
+      return;
+    }
+    if (form.password !== form.confirmPassword) {
+      setFormError("Passwords do not match.");
+      return;
+    }
+
+    const [firstName, ...rest] = form.fullName.trim().split(/\s+/);
+    const lastName = rest.join(" ") || firstName;
+
     setCreating(true);
     try {
-      await invokeFunction("create-staff-user", form);
-      setForm({ firstName: "", lastName: "", email: "", role: "talent_acquisition" });
-      toast.success("Staff account created", { description: `${form.email} can now reset their password to sign in.` });
+      await invokeFunction("create-staff-user", {
+        firstName,
+        lastName,
+        email: form.email,
+        role: form.role,
+        password: form.password,
+      });
+      toast.success("Staff account created", { description: `${form.email} can now sign in with the password you set.` });
+      setOpen(false);
+      setForm(EMPTY_FORM);
     } catch (err: any) {
-      toast.error("Unable to create staff account", { description: err?.message ?? "Check the details and try again." });
+      setFormError(err?.message ?? "Unable to create staff account. Check the details and try again.");
     } finally {
       setCreating(false);
     }
@@ -62,55 +103,15 @@ export function UsersPage() {
 
   return (
     <div>
-      <PageHeader title="Staff Users" description="Manage administrator and talent acquisition accounts." />
-
-      <Card className="mb-6">
-        <CardContent className="pt-6">
-          <form onSubmit={createStaff} className="grid grid-cols-1 gap-3 sm:grid-cols-5 sm:items-end">
-            <div className="space-y-1.5">
-              <Label htmlFor="firstName">First name</Label>
-              <Input
-                id="firstName"
-                required
-                value={form.firstName}
-                onChange={(e) => setForm({ ...form, firstName: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="lastName">Last name</Label>
-              <Input
-                id="lastName"
-                required
-                value={form.lastName}
-                onChange={(e) => setForm({ ...form, lastName: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                required
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Role</Label>
-              <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v as UserRole })}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="talent_acquisition">Talent Acquisition</SelectItem>
-                  <SelectItem value="admin">Administrator</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <Button disabled={creating}>{creating ? "Creating..." : "Add Staff"}</Button>
-          </form>
-        </CardContent>
-      </Card>
+      <PageHeader
+        title="Staff Users"
+        description="Manage administrator and talent acquisition accounts."
+        actions={
+          <Button onClick={openDialog}>
+            <Plus className="h-4 w-4" /> Add Staff
+          </Button>
+        }
+      />
 
       <div className="rounded-lg border border-border bg-card">
         <Table>
@@ -136,6 +137,110 @@ export function UsersPage() {
           </TableBody>
         </Table>
       </div>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Staff</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={createStaff} className="space-y-4">
+            {formError && (
+              <Alert variant="destructive">
+                <AlertDescription>{formError}</AlertDescription>
+              </Alert>
+            )}
+
+            <div className="space-y-1.5">
+              <Label htmlFor="staffName">Name</Label>
+              <Input
+                id="staffName"
+                required
+                value={form.fullName}
+                onChange={(e) => setForm({ ...form, fullName: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="staffEmail">Email</Label>
+              <Input
+                id="staffEmail"
+                required
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="staffPassword">Password</Label>
+              <div className="relative">
+                <Input
+                  id="staffPassword"
+                  required
+                  type={showPassword ? "text" : "password"}
+                  className="pr-10"
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="staffConfirmPassword">Confirm Password</Label>
+              <div className="relative">
+                <Input
+                  id="staffConfirmPassword"
+                  required
+                  type={showConfirmPassword ? "text" : "password"}
+                  className="pr-10"
+                  value={form.confirmPassword}
+                  onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((v) => !v)}
+                  className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
+                  aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                  tabIndex={-1}
+                >
+                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Role</Label>
+              <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v as UserRole })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="talent_acquisition">Talent Acquisition</SelectItem>
+                  <SelectItem value="admin">Administrator</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={creating}>
+                {creating ? "Creating..." : "Add Staff"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

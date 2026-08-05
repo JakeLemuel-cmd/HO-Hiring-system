@@ -1,22 +1,6 @@
 import { supabase, invokeFunction } from "@/lib/supabase";
-import { normalizeEmail, normalizeFullName } from "@/lib/validation";
-import type { ApplicantDocument, ExamAttemptDocument, PublicExamInformation } from "@/types";
-
-function mapApplicant(row: any): ApplicantDocument {
-  return {
-    id: row.id,
-    firstName: row.first_name,
-    middleName: row.middle_name ?? undefined,
-    lastName: row.last_name,
-    normalizedFullName: row.normalized_full_name,
-    email: row.email,
-    normalizedEmail: row.normalized_email,
-    mobileNumber: row.mobile_number,
-    applicantReferenceNumber: row.applicant_reference_number ?? undefined,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
-}
+import { normalizeEmail } from "@/lib/validation";
+import type { AttemptResultRow, ExamAttemptDocument, PublicExamInformation } from "@/types";
 
 function mapAttempt(row: any): ExamAttemptDocument {
   return {
@@ -77,23 +61,47 @@ export async function submitExamAttempt(attemptId: string, answers: Record<strin
   }>("submit-exam-attempt", { attemptId, answers });
 }
 
-export async function searchApplicants(term: string): Promise<ApplicantDocument[]> {
-  const normalizedEmail = normalizeEmail(term);
-  const normalizedName = normalizeFullName(term);
-  const results = new Map<string, ApplicantDocument>();
-
-  const [byEmail, byName] = await Promise.all([
-    supabase.from("applicants").select("*").eq("normalized_email", normalizedEmail),
-    supabase.from("applicants").select("*").eq("normalized_full_name", normalizedName),
-  ]);
-
-  (byEmail.data ?? []).forEach((row) => results.set(row.id, mapApplicant(row)));
-  (byName.data ?? []).forEach((row) => results.set(row.id, mapApplicant(row)));
-
-  return Array.from(results.values());
-}
 
 export async function getApplicantHistory(applicantId: string): Promise<ExamAttemptDocument[]> {
   const { data } = await supabase.from("exam_attempts").select("*").eq("applicant_id", applicantId);
   return (data ?? []).map(mapAttempt);
+}
+
+/** Every completed examination attempt across all hiring categories, newest first. */
+export function subscribeToAllAttemptResults(callback: (rows: AttemptResultRow[]) => void) {
+  async function load() {
+    const { data } = await supabase
+      .from("exam_attempts")
+      .select("*, applicants(first_name, last_name), categories(name, position_title)")
+      .eq("status", "completed")
+      .order("submitted_at", { ascending: false });
+    callback(
+      (data ?? []).map((row: any) => ({
+        attemptId: row.id,
+        applicantId: row.applicant_id,
+        applicantName: `${row.applicants?.first_name ?? ""} ${row.applicants?.last_name ?? ""}`.trim(),
+        categoryId: row.category_id,
+        categoryName: row.categories?.name ?? "",
+        positionTitle: row.categories?.position_title ?? "",
+        examId: row.exam_id,
+        status: row.status,
+        result: row.result ?? undefined,
+        earnedPoints: row.earned_points ?? undefined,
+        totalPoints: row.total_points ?? undefined,
+        percentage: row.percentage ?? undefined,
+        submittedAt: row.submitted_at ?? undefined,
+        answers: row.answers ?? {},
+      }))
+    );
+  }
+  load();
+
+  const channel = supabase
+    .channel("all-attempt-results")
+    .on("postgres_changes", { event: "*", schema: "public", table: "exam_attempts" }, load)
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }

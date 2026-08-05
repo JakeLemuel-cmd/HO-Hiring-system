@@ -117,6 +117,25 @@ export interface ExamListItem extends ExamDocument {
   positionTitle: string;
 }
 
+/** One completed examination attempt, joined with applicant and category for the
+ *  centralized cross-category Applicants list. */
+export interface AttemptResultRow {
+  attemptId: string;
+  applicantId: string;
+  applicantName: string;
+  categoryId: string;
+  categoryName: string;
+  positionTitle: string;
+  examId: string;
+  status: AttemptStatus;
+  result?: "passed" | "failed";
+  earnedPoints?: number;
+  totalPoints?: number;
+  percentage?: number;
+  submittedAt?: Timestamp;
+  answers: Record<string, string>;
+}
+
 export interface PublicExamInformation {
   examId: string;
   title: string;

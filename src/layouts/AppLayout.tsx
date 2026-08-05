@@ -49,7 +49,7 @@ function NavItems({ onNavigate }: { onNavigate?: () => void }) {
         <FileText className="h-4 w-4" /> Examinations
       </NavLink>
       <NavLink to="/admin/applicants" className={navItem} onClick={onNavigate}>
-        <Search className="h-4 w-4" /> Applicant Search
+        <Search className="h-4 w-4" /> Applicants
       </NavLink>
       {role && canManageStaff(role) && (
         <NavLink to="/admin/users" className={navItem} onClick={onNavigate}>

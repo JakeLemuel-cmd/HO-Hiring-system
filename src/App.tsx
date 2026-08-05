@@ -14,7 +14,7 @@ import { ExaminationsPage } from "@/pages/admin/ExaminationsPage";
 import { UsersPage } from "@/pages/admin/UsersPage";
 import { SettingsPage } from "@/pages/admin/SettingsPage";
 import { AuditLogsPage } from "@/pages/admin/AuditLogsPage";
-import { ApplicantSearchPage } from "@/pages/admin/ApplicantSearchPage";
+import { ApplicantsPage } from "@/pages/admin/ApplicantsPage";
 import { ApplicantProfilePage } from "@/pages/admin/ApplicantProfilePage";
 
 import { ExamRegisterPage } from "@/pages/public/ExamRegisterPage";
@@ -37,7 +37,7 @@ export default function App() {
           <Route path="/admin/categories/:categoryId" element={<CategoryDetailPage />} />
           <Route path="/admin/categories/:categoryId/:tab" element={<CategoryDetailPage />} />
           <Route path="/admin/examinations" element={<ExaminationsPage />} />
-          <Route path="/admin/applicants" element={<ApplicantSearchPage />} />
+          <Route path="/admin/applicants" element={<ApplicantsPage />} />
           <Route path="/admin/applicants/:applicantId" element={<ApplicantProfilePage />} />
 
           <Route element={<RoleGuard allow={["admin"]} />}>
