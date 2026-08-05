@@ -6,6 +6,7 @@ import { generateResultPdf, downloadBlob } from "@/lib/pdf";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { LoadingSkeleton } from "@/components/common/LoadingSkeleton";
 import { ErrorState } from "@/components/common/Misc";
+import { PublicExamHeader } from "@/components/common/PublicExamHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -70,12 +71,10 @@ export function ExamResultPage() {
   const { attempt, applicant, category } = result;
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-muted/40 p-4">
       <Card className="w-full max-w-md text-center">
         <CardContent className="pt-6">
-          <p className="text-sm text-muted-foreground">
-            {category.name} — {category.positionTitle}
-          </p>
+          <PublicExamHeader />
           <h1 className="mt-1 text-3xl font-bold tracking-tight text-foreground">
             {attempt.earnedPoints} / {attempt.totalPoints}
           </h1>

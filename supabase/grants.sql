@@ -13,3 +13,12 @@ grant select, insert, update, delete on all tables in schema public to authentic
 grant usage, select on all sequences in schema public to authenticated;
 alter default privileges in schema public grant select, insert, update, delete on tables to authenticated;
 alter default privileges in schema public grant usage, select on sequences to authenticated;
+
+-- Edge Functions use the service-role key, which bypasses RLS but still needs the same baseline
+-- GRANT — without it every admin.from(...) call inside a function fails with
+-- "permission denied for table ..." even though the row is right there and RLS is satisfied.
+grant usage on schema public to service_role;
+grant all on all tables in schema public to service_role;
+grant all on all sequences in schema public to service_role;
+alter default privileges in schema public grant all on tables to service_role;
+alter default privileges in schema public grant all on sequences to service_role;

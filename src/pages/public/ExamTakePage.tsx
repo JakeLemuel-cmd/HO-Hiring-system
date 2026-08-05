@@ -5,6 +5,7 @@ import { saveExamAnswers, submitExamAttempt } from "@/services/applicant.service
 import type { ExamAttemptDocument, SanitizedExamQuestion } from "@/types";
 import { LoadingSkeleton } from "@/components/common/LoadingSkeleton";
 import { ConfirmDialog } from "@/components/common/Misc";
+import { PublicExamHeader } from "@/components/common/PublicExamHeader";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
@@ -109,10 +110,11 @@ export function ExamTakePage() {
   const showWarning1 = remainingSeconds != null && remainingSeconds <= 60 && remainingSeconds > 0;
 
   return (
-    <div className="min-h-screen bg-muted/40 p-4">
+    <div className="min-h-screen bg-muted/40 p-3 sm:p-4">
       <div className="mx-auto max-w-3xl">
-        <div className="mb-4 rounded-lg border border-border bg-card p-4">
-          <div className="flex items-center justify-between">
+        <div className="mb-4 rounded-lg border border-border bg-card p-3 sm:p-4">
+          <PublicExamHeader />
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="text-sm text-muted-foreground">Question {current + 1} of {questions.length}</p>
               <p className="text-xs text-muted-foreground">{answeredCount} of {questions.length} answered</p>
@@ -147,7 +149,7 @@ export function ExamTakePage() {
           </p>
         )}
 
-        <div className="rounded-lg border border-border bg-card p-6">
+        <div className="rounded-lg border border-border bg-card p-4 sm:p-6">
           <p className="mb-4 font-medium text-foreground">{question.questionText}</p>
           {question.type === "fill_blank" ? (
             <Input
@@ -182,29 +184,29 @@ export function ExamTakePage() {
           )}
         </div>
 
-        <div className="mt-4 flex items-center justify-between">
+        <div className="mt-4 flex flex-wrap justify-center gap-1.5">
+          {questions.map((q, i) => (
+            <button
+              key={q.id}
+              onClick={() => setCurrent(i)}
+              className={cn(
+                "h-8 w-8 shrink-0 rounded-md text-xs font-medium transition-colors",
+                answers[q.id]
+                  ? "bg-success text-success-foreground"
+                  : i === current
+                  ? "border-2 border-primary"
+                  : "border border-border text-muted-foreground"
+              )}
+            >
+              {i + 1}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-4 flex items-center justify-between gap-3">
           <Button variant="outline" disabled={current === 0} onClick={() => setCurrent((c) => c - 1)}>
             Previous
           </Button>
-
-          <div className="flex flex-wrap gap-1">
-            {questions.map((q, i) => (
-              <button
-                key={q.id}
-                onClick={() => setCurrent(i)}
-                className={cn(
-                  "h-8 w-8 rounded-md text-xs font-medium transition-colors",
-                  answers[q.id]
-                    ? "bg-success text-success-foreground"
-                    : i === current
-                    ? "border-2 border-primary"
-                    : "border border-border text-muted-foreground"
-                )}
-              >
-                {i + 1}
-              </button>
-            ))}
-          </div>
 
           {current < questions.length - 1 ? (
             <Button onClick={() => setCurrent((c) => c + 1)}>Next</Button>

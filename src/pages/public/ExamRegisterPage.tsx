@@ -7,7 +7,8 @@ import { getPublicExamInformation, registerAndStartAttempt } from "@/services/ap
 import type { PublicExamInformation } from "@/types";
 import { LoadingSkeleton } from "@/components/common/LoadingSkeleton";
 import { ErrorState } from "@/components/common/Misc";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { PublicExamHeader } from "@/components/common/PublicExamHeader";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -28,7 +29,11 @@ export function ExamRegisterPage() {
     watch,
     setValue,
     formState: { errors, isSubmitting },
-  } = useForm<ApplicantRegistrationInput>({ resolver: zodResolver(applicantRegistrationSchema) });
+  } = useForm<ApplicantRegistrationInput>({
+    resolver: zodResolver(applicantRegistrationSchema),
+    mode: "onChange",
+    defaultValues: { fullName: "", contactNumber: "", email: "", applicantReferenceNumber: "" },
+  });
 
   useEffect(() => {
     if (!publicCode) return;
@@ -92,13 +97,11 @@ export function ExamRegisterPage() {
   }
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-lg items-center justify-center p-4">
+    <div className="mx-auto flex min-h-screen max-w-lg flex-col items-center justify-center p-4 sm:p-6">
       <Card className="w-full">
         <CardHeader>
+          <PublicExamHeader />
           <CardTitle>{info.title}</CardTitle>
-          <CardDescription>
-            {info.categoryName} — {info.positionTitle}
-          </CardDescription>
           <div className="mt-2 space-y-0.5 text-sm text-muted-foreground">
             <p>Number of Questions: {info.questionCount}</p>
             <p>Time Limit: {info.hasTimeLimit ? `${info.durationMinutes} minutes` : "No limit"}</p>
@@ -106,17 +109,10 @@ export function ExamRegisterPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <p className="mb-4 text-sm text-muted-foreground">Please enter your information before starting.</p>
-
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
             <Field label="Full Name" error={errors.fullName?.message} {...register("fullName")} />
             <Field label="Contact Number" error={errors.contactNumber?.message} {...register("contactNumber")} />
             <Field label="Email Address" type="email" error={errors.email?.message} {...register("email")} />
-            <Field
-              label="Applicant Reference Number (optional)"
-              error={errors.applicantReferenceNumber?.message}
-              {...register("applicantReferenceNumber")}
-            />
 
             <div className="flex items-start gap-2 pt-1">
               <Checkbox
