@@ -124,11 +124,15 @@ export function ExamBuilderTab({ category }: { category: CategoryDocument }) {
     };
   }, [examId]);
 
+  // Rebuilt from the current domain rather than the stored public_url, which may have been
+  // saved under an old/misconfigured VITE_PUBLIC_APP_URL and would otherwise stay stale forever.
+  const displayUrl = exam?.publicCode ? `${window.location.origin}/exam/${exam.publicCode}` : "";
+
   useEffect(() => {
-    if (exam?.publicUrl) {
-      QRCode.toDataURL(exam.publicUrl, { margin: 1, width: 180 }).then(setQrDataUrl);
+    if (displayUrl) {
+      QRCode.toDataURL(displayUrl, { margin: 1, width: 180 }).then(setQrDataUrl);
     }
-  }, [exam?.publicUrl]);
+  }, [displayUrl]);
 
   useEffect(() => {
     if (exam) setBuilderTitle(exam.title);
@@ -287,8 +291,8 @@ export function ExamBuilderTab({ category }: { category: CategoryDocument }) {
   }
 
   function copyLink() {
-    if (exam?.publicUrl) {
-      navigator.clipboard.writeText(exam.publicUrl);
+    if (displayUrl) {
+      navigator.clipboard.writeText(displayUrl);
       toast.success("Link copied to clipboard");
     }
   }
@@ -302,7 +306,7 @@ export function ExamBuilderTab({ category }: { category: CategoryDocument }) {
 
   return (
     <div className="space-y-6">
-      {exam.publicUrl && (
+      {displayUrl && (
         <Card>
           <CardContent className="pt-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
@@ -312,7 +316,7 @@ export function ExamBuilderTab({ category }: { category: CategoryDocument }) {
                   {category.name} · {category.positionTitle}
                 </p>
                 <p className="mt-2 break-all rounded-md bg-muted px-2 py-1 font-mono text-sm text-primary">
-                  {exam.publicUrl}
+                  {displayUrl}
                 </p>
                 <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                   <span className="flex items-center gap-1.5">
@@ -327,7 +331,7 @@ export function ExamBuilderTab({ category }: { category: CategoryDocument }) {
                     <Copy className="h-4 w-4" /> Copy Link
                   </Button>
                   <Button variant="outline" size="sm" asChild>
-                    <a href={exam.publicUrl} target="_blank" rel="noreferrer">
+                    <a href={displayUrl} target="_blank" rel="noreferrer">
                       <ExternalLink className="h-4 w-4" /> Open Link
                     </a>
                   </Button>

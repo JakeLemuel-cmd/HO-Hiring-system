@@ -51,7 +51,7 @@ export function ExaminationsPage() {
         id: "link",
         header: "Public Link",
         cell: ({ row }) => {
-          const url = row.original.publicUrl;
+          const url = row.original.publicCode ? `${window.location.origin}/exam/${row.original.publicCode}` : "";
           if (!url) return <span className="text-xs text-muted-foreground">Not published</span>;
           return (
             <div className="flex max-w-xs items-center gap-1.5">
