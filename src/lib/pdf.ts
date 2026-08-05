@@ -38,7 +38,7 @@ export async function generateResultPdf(data: ResultPdfData): Promise<{ blob: Bl
   try {
     const logoDataUrl = await loadImageAsDataUrl("/BMPClogo.png");
     const logoProps = docPdf.getImageProperties(logoDataUrl);
-    const logoWidth = 160;
+    const logoWidth = 320;
     const logoHeight = (logoProps.height * logoWidth) / logoProps.width;
     docPdf.addImage(logoDataUrl, "PNG", (pageWidth - logoWidth) / 2, 30, logoWidth, logoHeight);
     headerBottom = 30 + logoHeight + 12;
