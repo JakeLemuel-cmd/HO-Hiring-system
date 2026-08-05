@@ -40,8 +40,8 @@ export async function generateResultPdf(data: ResultPdfData): Promise<{ blob: Bl
     const logoProps = docPdf.getImageProperties(logoDataUrl);
     const logoWidth = 320;
     const logoHeight = (logoProps.height * logoWidth) / logoProps.width;
-    docPdf.addImage(logoDataUrl, "PNG", (pageWidth - logoWidth) / 2, 30, logoWidth, logoHeight);
-    headerBottom = 30 + logoHeight + 12;
+    docPdf.addImage(logoDataUrl, "PNG", (pageWidth - logoWidth) / 2, 15, logoWidth, logoHeight);
+    headerBottom = 15 + logoHeight + 6;
   } catch {
     // Logo failed to load — fall back to text-only header.
   }
