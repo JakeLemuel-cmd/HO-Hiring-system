@@ -1,15 +1,44 @@
 import { jsPDF } from "jspdf";
 import QRCode from "qrcode";
 
-async function loadImageAsDataUrl(url: string): Promise<string> {
+/** Loads a PNG and crops away its fully-transparent border, so a logo file with
+ *  built-in padding around the mark doesn't leave a huge gap when placed in the PDF. */
+async function loadCroppedImageDataUrl(url: string): Promise<string> {
   const res = await fetch(url);
   const blob = await res.blob();
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
+  const bitmap = await createImageBitmap(blob);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  const ctx = canvas.getContext("2d")!;
+  ctx.drawImage(bitmap, 0, 0);
+
+  const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  let minX = canvas.width;
+  let minY = canvas.height;
+  let maxX = 0;
+  let maxY = 0;
+  for (let y = 0; y < canvas.height; y++) {
+    for (let x = 0; x < canvas.width; x++) {
+      const alpha = data[(y * canvas.width + x) * 4 + 3];
+      if (alpha > 10) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  if (maxX < minX || maxY < minY) return canvas.toDataURL("image/png"); // fully transparent, nothing to crop
+
+  const cropWidth = maxX - minX + 1;
+  const cropHeight = maxY - minY + 1;
+  const cropCanvas = document.createElement("canvas");
+  cropCanvas.width = cropWidth;
+  cropCanvas.height = cropHeight;
+  cropCanvas.getContext("2d")!.drawImage(canvas, minX, minY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+  return cropCanvas.toDataURL("image/png");
 }
 
 export interface ResultPdfData {
@@ -36,7 +65,7 @@ export async function generateResultPdf(data: ResultPdfData): Promise<{ blob: Bl
 
   let headerBottom = 50;
   try {
-    const logoDataUrl = await loadImageAsDataUrl("/BMPClogo.png");
+    const logoDataUrl = await loadCroppedImageDataUrl("/BMPClogo.png");
     const logoProps = docPdf.getImageProperties(logoDataUrl);
     const logoWidth = 320;
     const logoHeight = (logoProps.height * logoWidth) / logoProps.width;
