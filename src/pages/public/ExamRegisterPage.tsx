@@ -28,7 +28,7 @@ export function ExamRegisterPage() {
     handleSubmit,
     watch,
     setValue,
-    formState: { errors, isSubmitting },
+    formState: { errors, dirtyFields, isSubmitted, isSubmitting },
   } = useForm<ApplicantRegistrationInput>({
     resolver: zodResolver(applicantRegistrationSchema),
     mode: "onChange",
@@ -110,9 +110,22 @@ export function ExamRegisterPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
-            <Field label="Full Name" error={errors.fullName?.message} {...register("fullName")} />
-            <Field label="Contact Number" error={errors.contactNumber?.message} {...register("contactNumber")} />
-            <Field label="Email Address" type="email" error={errors.email?.message} {...register("email")} />
+            <Field
+              label="Full Name"
+              error={(dirtyFields.fullName || isSubmitted) ? errors.fullName?.message : undefined}
+              {...register("fullName")}
+            />
+            <Field
+              label="Contact Number"
+              error={(dirtyFields.contactNumber || isSubmitted) ? errors.contactNumber?.message : undefined}
+              {...register("contactNumber")}
+            />
+            <Field
+              label="Email Address"
+              type="email"
+              error={(dirtyFields.email || isSubmitted) ? errors.email?.message : undefined}
+              {...register("email")}
+            />
 
             <div className="flex items-start gap-2 pt-1">
               <Checkbox
