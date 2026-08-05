@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import type { ColumnDef } from "@tanstack/react-table";
 import { supabase } from "@/lib/supabase";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -77,11 +78,17 @@ export function ApplicantsTab({ categoryId }: { categoryId: string }) {
         id: "name",
         header: "Name",
         accessorFn: (row) => `${row.applicant?.firstName ?? ""} ${row.applicant?.lastName ?? ""}`,
-        cell: ({ row }) => (
-          <span className="font-medium text-foreground">
-            {row.original.applicant?.firstName} {row.original.applicant?.lastName}
-          </span>
-        ),
+        cell: ({ row }) =>
+          row.original.applicant ? (
+            <Link
+              to={`/admin/applicants/${row.original.applicant.id}`}
+              className="font-medium text-primary hover:underline"
+            >
+              {row.original.applicant.firstName} {row.original.applicant.lastName}
+            </Link>
+          ) : (
+            <span className="font-medium text-foreground">—</span>
+          ),
       },
       { id: "email", header: "Email", accessorFn: (row) => row.applicant?.email ?? "" },
       {
@@ -118,6 +125,11 @@ export function ApplicantsTab({ categoryId }: { categoryId: string }) {
   }
 
   return (
-    <DataTable columns={columns} data={rows} searchColumnId="name" searchPlaceholder="Search applicants..." />
+    <div>
+      <p className="mb-3 text-sm text-muted-foreground">
+        {rows.length} applicant{rows.length === 1 ? "" : "s"}
+      </p>
+      <DataTable columns={columns} data={rows} searchColumnId="name" searchPlaceholder="Search applicants..." />
+    </div>
   );
 }
