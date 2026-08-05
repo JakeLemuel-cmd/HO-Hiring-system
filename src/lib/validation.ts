@@ -95,7 +95,7 @@ export const applicantRegistrationSchema = z.object({
   contactNumber: z
     .string()
     .trim()
-    .regex(phoneRegex, "Enter an 11-digit contact number starting with 09 (e.g. 09171234567)."),
+    .regex(phoneRegex, "Enter an 11-digit contact number starting with 09 (e.g. )."),
   email: z.string().trim().email("Enter a valid email address."),
   applicantReferenceNumber: z.string().trim().optional(),
   consent: z.literal(true, {

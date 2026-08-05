@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { invokeFunction } from "@/lib/supabase";
 import { saveExamAnswers, submitExamAttempt } from "@/services/applicant.service";
@@ -19,6 +19,21 @@ function formatTime(seconds: number): string {
   return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 }
 
+/** Groups questions into pages by contiguous runs of the same type — each generated
+ *  batch (e.g. 10 Multiple Choice, then 5 True or False) becomes its own page. */
+function groupIntoPages(questions: SanitizedExamQuestion[]): SanitizedExamQuestion[][] {
+  const pages: SanitizedExamQuestion[][] = [];
+  for (const q of questions) {
+    const lastPage = pages[pages.length - 1];
+    if (lastPage && lastPage[0].type === q.type) {
+      lastPage.push(q);
+    } else {
+      pages.push([q]);
+    }
+  }
+  return pages;
+}
+
 export function ExamTakePage() {
   const { publicCode, attemptId } = useParams();
   const navigate = useNavigate();
@@ -26,7 +41,7 @@ export function ExamTakePage() {
   const [attempt, setAttempt] = useState<ExamAttemptDocument | null>(null);
   const [questions, setQuestions] = useState<SanitizedExamQuestion[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [current, setCurrent] = useState(0);
+  const [currentPage, setCurrentPage] = useState(0);
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -80,6 +95,26 @@ export function ExamTakePage() {
     return () => window.removeEventListener("beforeunload", handler);
   }, [submitted]);
 
+  // Best-effort deterrents only — no website can block OS-level screenshots or screen
+  // recording. This just discourages casual copy/paste, right-click saving, and printing.
+  useEffect(() => {
+    const blockContextMenu = (e: MouseEvent) => e.preventDefault();
+    const blockCopy = (e: ClipboardEvent) => e.preventDefault();
+    const blockKeys = (e: KeyboardEvent) => {
+      if (e.key === "PrintScreen" || ((e.ctrlKey || e.metaKey) && ["c", "p", "s", "u"].includes(e.key.toLowerCase()))) {
+        e.preventDefault();
+      }
+    };
+    document.addEventListener("contextmenu", blockContextMenu);
+    document.addEventListener("copy", blockCopy);
+    document.addEventListener("keydown", blockKeys);
+    return () => {
+      document.removeEventListener("contextmenu", blockContextMenu);
+      document.removeEventListener("copy", blockCopy);
+      document.removeEventListener("keydown", blockKeys);
+    };
+  }, []);
+
   const persistAnswers = useCallback(
     (next: Record<string, string>) => {
       if (!attemptId) return;
@@ -102,21 +137,24 @@ export function ExamTakePage() {
     navigate(`/exam/${publicCode}/result/${result.attemptId}`, { state: { autoSubmitted: isAutoSubmit } });
   }
 
+  const pages = useMemo(() => groupIntoPages(questions), [questions]);
+
   if (!attempt || questions.length === 0) return <LoadingSkeleton />;
 
-  const question = questions[current];
+  const pageQuestions = pages[currentPage] ?? [];
   const answeredCount = Object.keys(answers).length;
+  const isLastPage = currentPage === pages.length - 1;
   const showWarning5 = remainingSeconds != null && remainingSeconds <= 300 && remainingSeconds > 60;
   const showWarning1 = remainingSeconds != null && remainingSeconds <= 60 && remainingSeconds > 0;
 
   return (
-    <div className="min-h-screen bg-muted/40 p-3 sm:p-4">
+    <div className="min-h-screen select-none bg-muted/40 p-3 sm:p-4 print:hidden">
       <div className="mx-auto max-w-3xl">
         <div className="mb-4 rounded-lg border border-border bg-card p-3 sm:p-4">
           <PublicExamHeader />
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p className="text-sm text-muted-foreground">Question {current + 1} of {questions.length}</p>
+              <p className="text-sm text-muted-foreground">Page {currentPage + 1} of {pages.length}</p>
               <p className="text-xs text-muted-foreground">{answeredCount} of {questions.length} answered</p>
             </div>
             {remainingSeconds != null && (
@@ -149,67 +187,80 @@ export function ExamTakePage() {
           </p>
         )}
 
-        <div className="rounded-lg border border-border bg-card p-4 sm:p-6">
-          <p className="mb-4 font-medium text-foreground">{question.questionText}</p>
-          {question.type === "fill_blank" ? (
-            <Input
-              value={answers[question.id] ?? ""}
-              onChange={(e) => selectAnswer(question.id, e.target.value)}
-              placeholder="Type your answer"
-            />
-          ) : (
-            <div className="space-y-2">
-              {question.options.map((opt) => {
-                const selected = answers[question.id] === opt.id;
-                return (
-                  <label
-                    key={opt.id}
-                    className={cn(
-                      "flex cursor-pointer items-center gap-3 rounded-md border p-3 text-sm transition-colors",
-                      selected ? "border-primary bg-primary/5" : "border-border hover:bg-accent"
-                    )}
-                  >
-                    <input
-                      type="radio"
-                      name={question.id}
-                      className="h-4 w-4 accent-primary"
-                      checked={selected}
-                      onChange={() => selectAnswer(question.id, opt.id)}
-                    />
-                    {opt.text}
-                  </label>
-                );
-              })}
-            </div>
-          )}
+        <div className="max-h-[65vh] space-y-4 overflow-y-auto pr-1">
+          {pageQuestions.map((question) => {
+            const overallIndex = questions.findIndex((q) => q.id === question.id) + 1;
+            return (
+              <div key={question.id} className="rounded-lg border border-border bg-card p-4 sm:p-6">
+                <p className="mb-1 text-xs font-medium text-muted-foreground">Question {overallIndex}</p>
+                <p className="mb-4 font-medium text-foreground">{question.questionText}</p>
+                {question.type === "fill_blank" ? (
+                  <Input
+                    value={answers[question.id] ?? ""}
+                    onChange={(e) => selectAnswer(question.id, e.target.value)}
+                    placeholder="Type your answer"
+                  />
+                ) : (
+                  <div className="space-y-2">
+                    {question.options.map((opt) => {
+                      const selected = answers[question.id] === opt.id;
+                      return (
+                        <label
+                          key={opt.id}
+                          className={cn(
+                            "flex cursor-pointer items-center gap-3 rounded-md border p-3 text-sm transition-colors",
+                            selected ? "border-primary bg-primary/5" : "border-border hover:bg-accent"
+                          )}
+                        >
+                          <input
+                            type="radio"
+                            name={question.id}
+                            className="h-4 w-4 accent-primary"
+                            checked={selected}
+                            onChange={() => selectAnswer(question.id, opt.id)}
+                          />
+                          {opt.text}
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
 
-        <div className="mt-4 flex flex-wrap justify-center gap-1.5">
-          {questions.map((q, i) => (
-            <button
-              key={q.id}
-              onClick={() => setCurrent(i)}
-              className={cn(
-                "h-8 w-8 shrink-0 rounded-md text-xs font-medium transition-colors",
-                answers[q.id]
-                  ? "bg-success text-success-foreground"
-                  : i === current
-                  ? "border-2 border-primary"
-                  : "border border-border text-muted-foreground"
-              )}
-            >
-              {i + 1}
-            </button>
-          ))}
-        </div>
+        {pages.length > 1 && (
+          <div className="mt-4 flex flex-wrap justify-center gap-1.5">
+            {pages.map((page, i) => {
+              const allAnswered = page.every((q) => answers[q.id]);
+              return (
+                <button
+                  key={i}
+                  onClick={() => setCurrentPage(i)}
+                  className={cn(
+                    "h-8 w-8 shrink-0 rounded-md text-xs font-medium transition-colors",
+                    allAnswered
+                      ? "bg-success text-success-foreground"
+                      : i === currentPage
+                      ? "border-2 border-primary"
+                      : "border border-border text-muted-foreground"
+                  )}
+                >
+                  {i + 1}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         <div className="mt-4 flex items-center justify-between gap-3">
-          <Button variant="outline" disabled={current === 0} onClick={() => setCurrent((c) => c - 1)}>
+          <Button variant="outline" disabled={currentPage === 0} onClick={() => setCurrentPage((p) => p - 1)}>
             Previous
           </Button>
 
-          {current < questions.length - 1 ? (
-            <Button onClick={() => setCurrent((c) => c + 1)}>Next</Button>
+          {!isLastPage ? (
+            <Button onClick={() => setCurrentPage((p) => p + 1)}>Next</Button>
           ) : (
             <Button className="bg-success text-success-foreground hover:bg-success/90" onClick={() => setConfirmOpen(true)}>
               Submit Examination
