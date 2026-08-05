@@ -1,6 +1,17 @@
 import { jsPDF } from "jspdf";
 import QRCode from "qrcode";
 
+async function loadImageAsDataUrl(url: string): Promise<string> {
+  const res = await fetch(url);
+  const blob = await res.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
 export interface ResultPdfData {
   applicantName: string;
   email: string;
@@ -20,18 +31,31 @@ export interface ResultPdfData {
 
 export async function generateResultPdf(data: ResultPdfData): Promise<{ blob: Blob; filename: string }> {
   const docPdf = new jsPDF({ unit: "pt", format: "a4" });
+  const pageWidth = docPdf.internal.pageSize.getWidth();
   const qrDataUrl = await QRCode.toDataURL(data.verificationUrl, { margin: 1, width: 160 });
+
+  let headerBottom = 50;
+  try {
+    const logoDataUrl = await loadImageAsDataUrl("/BMPClogo.png");
+    const logoProps = docPdf.getImageProperties(logoDataUrl);
+    const logoWidth = 100;
+    const logoHeight = (logoProps.height * logoWidth) / logoProps.width;
+    docPdf.addImage(logoDataUrl, "PNG", (pageWidth - logoWidth) / 2, 30, logoWidth, logoHeight);
+    headerBottom = 30 + logoHeight + 12;
+  } catch {
+    // Logo failed to load — fall back to text-only header.
+  }
 
   docPdf.setFontSize(18);
   docPdf.setFont("helvetica", "bold");
-  docPdf.text("Hiring Examination Result", 40, 50);
+  docPdf.text("Hiring Examination Result", pageWidth / 2, headerBottom, { align: "center" });
 
   docPdf.setFontSize(10);
   docPdf.setFont("helvetica", "normal");
-  docPdf.text(`Generated: ${new Date().toLocaleString()}`, 40, 68);
-  docPdf.line(40, 78, 555, 78);
+  docPdf.text(`Generated: ${new Date().toLocaleString()}`, pageWidth / 2, headerBottom + 18, { align: "center" });
+  docPdf.line(40, headerBottom + 28, 555, headerBottom + 28);
 
-  let y = 110;
+  let y = headerBottom + 60;
   const row = (label: string, value: string) => {
     docPdf.setFont("helvetica", "bold");
     docPdf.text(`${label}:`, 40, y);
@@ -51,11 +75,12 @@ export async function generateResultPdf(data: ResultPdfData): Promise<{ blob: Bl
   row("Percentage", `${data.percentage}%`);
   row("Result", data.result === "passed" ? "Passed" : "Failed");
   row("Attempt Number", String(data.attemptNumber));
-  row("Result Reference No.", data.resultReferenceNumber);
+  row("Examinee No.", data.resultReferenceNumber);
 
-  docPdf.addImage(qrDataUrl, "PNG", 420, 100, 110, 110);
+  const qrY = headerBottom + 50;
+  docPdf.addImage(qrDataUrl, "PNG", 420, qrY, 110, 110);
   docPdf.setFontSize(8);
-  docPdf.text("Scan to verify", 440, 222);
+  docPdf.text("Scan to verify", 440, qrY + 122);
 
   const filename = `${data.applicantName.replace(/\s+/g, "-")}_${data.categoryName.replace(/\s+/g, "-")}_Exam-Result.pdf`;
   const blob = docPdf.output("blob");

@@ -66,7 +66,7 @@ export function ResultsTab({ categoryId, passingScore }: { categoryId: string; p
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Reference No.</TableHead>
+            <TableHead>Examinee No.</TableHead>
             <TableHead>Score</TableHead>
             <TableHead>Percentage</TableHead>
             <TableHead>Result</TableHead>

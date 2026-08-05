@@ -80,7 +80,7 @@ export function ExamResultPage() {
           </h1>
           <p className="text-muted-foreground">{attempt.percentage}%</p>
           <div className="mt-3 flex justify-center">{attempt.result && <StatusBadge status={attempt.result} />}</div>
-          <p className="mt-4 text-xs text-muted-foreground">Reference No. {attempt.resultReferenceNumber}</p>
+          <p className="mt-4 text-xs text-muted-foreground">Examinee No. {attempt.resultReferenceNumber}</p>
           <p className="mt-1 text-xs text-muted-foreground">
             Applicant: {applicant.firstName} {applicant.lastName}
           </p>
