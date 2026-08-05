@@ -88,11 +88,14 @@ export const examBuilderSetupSchema = z.object({
     .max(100, "A maximum of 100 questions is supported."),
 });
 
-const phoneRegex = /^[0-9+\-()\s]{7,20}$/;
+const phoneRegex = /^09\d{9}$/;
 
 export const applicantRegistrationSchema = z.object({
   fullName: z.string().trim().min(2, "Full name must contain at least two characters."),
-  contactNumber: z.string().trim().regex(phoneRegex, "Enter a valid contact number."),
+  contactNumber: z
+    .string()
+    .trim()
+    .regex(phoneRegex, "Enter an 11-digit contact number starting with 09 (e.g. 09171234567)."),
   email: z.string().trim().email("Enter a valid email address."),
   applicantReferenceNumber: z.string().trim().optional(),
   consent: z.literal(true, {

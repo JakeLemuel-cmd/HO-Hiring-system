@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { forwardRef, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useNavigate, useParams } from "react-router-dom";
@@ -117,6 +117,9 @@ export function ExamRegisterPage() {
             />
             <Field
               label="Contact Number"
+              inputMode="numeric"
+              maxLength={11}
+              placeholder="09171234567"
               error={(dirtyFields.contactNumber || isSubmitted) ? errors.contactNumber?.message : undefined}
               {...register("contactNumber")}
             />
@@ -156,20 +159,19 @@ export function ExamRegisterPage() {
   );
 }
 
-function Field({
-  label,
-  error,
-  type = "text",
-  ...rest
-}: { label: string; error?: string; type?: string } & React.InputHTMLAttributes<HTMLInputElement>) {
+const Field = forwardRef<
+  HTMLInputElement,
+  { label: string; error?: string; type?: string } & React.InputHTMLAttributes<HTMLInputElement>
+>(({ label, error, type = "text", ...rest }, ref) => {
   return (
     <div className="space-y-1.5">
       <Label>{label}</Label>
-      <Input type={type} {...rest} />
+      <Input ref={ref} type={type} {...rest} />
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );
-}
+});
+Field.displayName = "Field";
 
 function CenteredMessage({ title, body }: { title: string; body: string }) {
   return (
