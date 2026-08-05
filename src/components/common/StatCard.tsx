@@ -8,15 +8,23 @@ export function StatCard({
   icon: Icon,
   hint,
   className,
+  onClick,
 }: {
   label: string;
   value: string | number;
   icon?: LucideIcon;
   hint?: string;
   className?: string;
+  onClick?: () => void;
 }) {
   return (
-    <Card className={cn("shadow-none", className)}>
+    <Card
+      className={cn("shadow-none", onClick && "cursor-pointer transition-colors hover:bg-accent", className)}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => (e.key === "Enter" || e.key === " ") && onClick() : undefined}
+    >
       <CardContent className="p-4">
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium text-muted-foreground">{label}</span>

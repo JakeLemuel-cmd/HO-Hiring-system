@@ -11,6 +11,7 @@ import { ExamBuilderTab } from "@/features/exams/ExamBuilderTab";
 import { ApplicantsTab } from "@/features/applicants/ApplicantsTab";
 import { ResultsTab } from "@/features/applicants/ResultsTab";
 import { CategorySettingsTab } from "@/features/categories/CategorySettingsTab";
+import { CategoryStatDetailDialog, type StatFilter, type StatSort } from "@/features/categories/CategoryStatDetailDialog";
 
 const TABS = ["overview", "exam", "applicants", "results", "settings"] as const;
 type Tab = (typeof TABS)[number];
@@ -59,7 +60,7 @@ export function CategoryDetailPage() {
         </TabsList>
 
         <TabsContent value="overview">
-          <OverviewTab category={category} stats={stats} />
+          <OverviewTab category={category} stats={stats} categoryId={categoryId} />
         </TabsContent>
         <TabsContent value="exam">
           <ExamBuilderTab category={category} />
@@ -78,19 +79,61 @@ export function CategoryDetailPage() {
   );
 }
 
-function OverviewTab({ category, stats }: { category: CategoryDocument; stats: CategoryStatistics }) {
+function OverviewTab({
+  category,
+  stats,
+  categoryId,
+}: {
+  category: CategoryDocument;
+  stats: CategoryStatistics;
+  categoryId: string;
+}) {
   const isEmpty = stats.totalApplicants === 0;
+  const [detail, setDetail] = useState<{ title: string; filter: StatFilter; sort: StatSort } | null>(null);
+
   return (
     <div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Total Applicants" value={stats.totalApplicants} />
-        <StatCard label="Completed Examinations" value={stats.completedExaminations} />
-        <StatCard label="Passed Applicants" value={stats.passedApplicants} />
-        <StatCard label="Failed Applicants" value={stats.failedApplicants} />
-        <StatCard label="Average Score" value={`${stats.averageScore}%`} />
-        <StatCard label="Highest Score" value={`${stats.highestScore}%`} />
-        <StatCard label="Lowest Score" value={`${stats.lowestScore}%`} />
-        <StatCard label="Pass Rate" value={`${stats.passRate}%`} />
+        <StatCard
+          label="Total Applicants"
+          value={stats.totalApplicants}
+          onClick={() => setDetail({ title: "Total Applicants", filter: "all", sort: "date" })}
+        />
+        <StatCard
+          label="Completed Examinations"
+          value={stats.completedExaminations}
+          onClick={() => setDetail({ title: "Completed Examinations", filter: "all", sort: "date" })}
+        />
+        <StatCard
+          label="Passed Applicants"
+          value={stats.passedApplicants}
+          onClick={() => setDetail({ title: "Passed Applicants", filter: "passed", sort: "date" })}
+        />
+        <StatCard
+          label="Failed Applicants"
+          value={stats.failedApplicants}
+          onClick={() => setDetail({ title: "Failed Applicants", filter: "failed", sort: "date" })}
+        />
+        <StatCard
+          label="Average Score"
+          value={`${stats.averageScore}%`}
+          onClick={() => setDetail({ title: "All Results", filter: "all", sort: "date" })}
+        />
+        <StatCard
+          label="Highest Score"
+          value={`${stats.highestScore}%`}
+          onClick={() => setDetail({ title: "Highest Scores", filter: "all", sort: "highest" })}
+        />
+        <StatCard
+          label="Lowest Score"
+          value={`${stats.lowestScore}%`}
+          onClick={() => setDetail({ title: "Lowest Scores", filter: "all", sort: "lowest" })}
+        />
+        <StatCard
+          label="Pass Rate"
+          value={`${stats.passRate}%`}
+          onClick={() => setDetail({ title: "All Results", filter: "all", sort: "date" })}
+        />
       </div>
 
       {isEmpty && (
@@ -101,6 +144,15 @@ function OverviewTab({ category, stats }: { category: CategoryDocument; stats: C
           />
         </div>
       )}
+
+      <CategoryStatDetailDialog
+        open={detail !== null}
+        onClose={() => setDetail(null)}
+        categoryId={categoryId}
+        title={detail?.title ?? ""}
+        filter={detail?.filter}
+        sort={detail?.sort}
+      />
     </div>
   );
 }

@@ -115,6 +115,7 @@ export interface ExamDocument {
 export interface ExamListItem extends ExamDocument {
   categoryName: string;
   positionTitle: string;
+  applicantCount: number;
 }
 
 /** One completed examination attempt, joined with applicant and category for the

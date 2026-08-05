@@ -67,11 +67,23 @@ export function subscribeToAllExams(callback: (exams: ExamListItem[]) => void) {
       .select("*, categories(name, position_title)")
       .not("public_code", "is", null)
       .order("published_at", { ascending: false });
+    const exams = data ?? [];
+
+    const examIds = exams.map((row: any) => row.id);
+    const applicantCountByExamId = new Map<string, number>();
+    if (examIds.length > 0) {
+      const { data: attempts } = await supabase.from("exam_attempts").select("exam_id").in("exam_id", examIds);
+      (attempts ?? []).forEach((a: any) => {
+        applicantCountByExamId.set(a.exam_id, (applicantCountByExamId.get(a.exam_id) ?? 0) + 1);
+      });
+    }
+
     callback(
-      (data ?? []).map((row: any) => ({
+      exams.map((row: any) => ({
         ...mapExam(row),
         categoryName: row.categories?.name ?? "",
         positionTitle: row.categories?.position_title ?? "",
+        applicantCount: applicantCountByExamId.get(row.id) ?? 0,
       }))
     );
   }
@@ -80,6 +92,7 @@ export function subscribeToAllExams(callback: (exams: ExamListItem[]) => void) {
   const channel = supabase
     .channel("all-exams")
     .on("postgres_changes", { event: "*", schema: "public", table: "exams" }, load)
+    .on("postgres_changes", { event: "*", schema: "public", table: "exam_attempts" }, load)
     .subscribe();
 
   return () => {

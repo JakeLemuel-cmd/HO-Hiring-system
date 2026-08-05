@@ -42,6 +42,7 @@ export function ExaminationsPage() {
         cell: ({ row }) => <StatusBadge status={row.original.availabilityStatus} />,
       },
       { accessorKey: "questionCount", header: "Questions" },
+      { accessorKey: "applicantCount", header: "Applicants" },
       {
         accessorKey: "passingScore",
         header: "Passing Score",
