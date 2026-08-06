@@ -1,0 +1,175 @@
+import { useEffect, useState } from "react";
+import JSZip from "jszip";
+import { toast } from "sonner";
+import { Download } from "lucide-react";
+import { supabase, PUBLIC_APP_URL } from "@/lib/supabase";
+import { listCategoriesOnce } from "@/services/category.service";
+import { generateResultPdf } from "@/lib/pdf";
+import { PageHeader } from "@/components/common/Misc";
+import { EmptyState } from "@/components/common/EmptyState";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { ApplicantDocument, CategoryDocument, ExamAttemptDocument } from "@/types";
+
+function mapAttempt(row: any): ExamAttemptDocument {
+  return {
+    id: row.id,
+    applicantId: row.applicant_id,
+    categoryId: row.category_id,
+    examId: row.exam_id,
+    attemptNumber: row.attempt_number,
+    status: row.status,
+    earnedPoints: row.earned_points ?? undefined,
+    totalPoints: row.total_points ?? undefined,
+    percentage: row.percentage ?? undefined,
+    result: row.result ?? undefined,
+    resultReferenceNumber: row.result_reference_number ?? undefined,
+    submittedAt: row.submitted_at ?? undefined,
+    answers: row.answers ?? {},
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapApplicant(row: any): ApplicantDocument {
+  return {
+    id: row.id,
+    firstName: row.first_name,
+    middleName: row.middle_name ?? undefined,
+    lastName: row.last_name,
+    normalizedFullName: row.normalized_full_name,
+    email: row.email,
+    normalizedEmail: row.normalized_email,
+    mobileNumber: row.mobile_number,
+    applicantReferenceNumber: row.applicant_reference_number ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function ExportPage() {
+  const [categories, setCategories] = useState<CategoryDocument[]>([]);
+  const [categoryId, setCategoryId] = useState<string>("");
+  const [exporting, setExporting] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+
+  useEffect(() => {
+    listCategoriesOnce().then(setCategories);
+  }, []);
+
+  const category = categories.find((c) => c.id === categoryId) ?? null;
+
+  async function handleExport() {
+    if (!category) return;
+    setExporting(true);
+    setProgress(null);
+    try {
+      const { data: attemptRows } = await supabase
+        .from("exam_attempts")
+        .select("*")
+        .eq("category_id", category.id)
+        .eq("status", "completed");
+      const attempts = (attemptRows ?? []).map(mapAttempt);
+
+      if (attempts.length === 0) {
+        toast.error("No completed results found for this category.");
+        return;
+      }
+
+      const applicantIds = Array.from(new Set(attempts.map((a) => a.applicantId)));
+      const { data: applicantRows } = await supabase.from("applicants").select("*").in("id", applicantIds);
+      const applicantsById = new Map<string, ApplicantDocument>();
+      (applicantRows ?? []).forEach((row) => applicantsById.set(row.id, mapApplicant(row)));
+
+      const zip = new JSZip();
+      setProgress({ done: 0, total: attempts.length });
+
+      for (const attempt of attempts) {
+        const applicant = applicantsById.get(attempt.applicantId);
+        if (!applicant) continue;
+
+        const { blob, filename } = await generateResultPdf({
+          applicantName: `${applicant.firstName} ${applicant.lastName}`,
+          email: applicant.email,
+          applicantReferenceNumber: applicant.applicantReferenceNumber,
+          categoryName: category.name,
+          positionTitle: category.positionTitle,
+          examTitle: `${category.name} Examination`,
+          examDate: attempt.submittedAt ? new Date(attempt.submittedAt).toLocaleDateString() : "",
+          rawScore: attempt.earnedPoints ?? 0,
+          totalPoints: attempt.totalPoints ?? 0,
+          percentage: attempt.percentage ?? 0,
+          result: attempt.result ?? "failed",
+          attemptNumber: attempt.attemptNumber,
+          resultReferenceNumber: attempt.resultReferenceNumber ?? "",
+          verificationUrl: `${PUBLIC_APP_URL}/exam/verify/${attempt.resultReferenceNumber}`,
+        });
+        zip.file(filename, blob);
+        setProgress((prev) => ({ done: (prev?.done ?? 0) + 1, total: attempts.length }));
+      }
+
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const zipFilename = `${category.name} - ${category.positionTitle}.zip`;
+      const url = URL.createObjectURL(zipBlob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = zipFilename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      toast.success(`Exported ${attempts.length} result${attempts.length === 1 ? "" : "s"}`, {
+        description: zipFilename,
+      });
+    } catch {
+      toast.error("Failed to export results. Please try again.");
+    } finally {
+      setExporting(false);
+      setProgress(null);
+    }
+  }
+
+  return (
+    <div>
+      <PageHeader title="Export Results" description="Download all applicant result PDFs for a hiring category as a ZIP file." />
+
+      <Card className="max-w-lg">
+        <CardContent className="space-y-4 pt-6">
+          {categories.length === 0 ? (
+            <EmptyState title="No categories yet" description="Create a hiring category before exporting results." />
+          ) : (
+            <>
+              <div className="space-y-1.5">
+                <Label>Hiring Category</Label>
+                <Select value={categoryId} onValueChange={setCategoryId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name} — {c.positionTitle}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Button onClick={handleExport} disabled={!category || exporting} className="w-full">
+                <Download className="h-4 w-4" />
+                {exporting
+                  ? progress
+                    ? `Exporting ${progress.done}/${progress.total}...`
+                    : "Preparing export..."
+                  : "Export All Results (ZIP)"}
+              </Button>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

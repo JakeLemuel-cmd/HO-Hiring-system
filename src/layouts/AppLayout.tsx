@@ -11,6 +11,7 @@ import {
   Search,
   ClipboardList,
   FileText,
+  Download,
 } from "lucide-react";
 import { useAuth } from "@/features/auth/AuthContext";
 import { canManageStaff, canManageSettings, canViewAuditLogs } from "@/lib/permissions";
@@ -50,6 +51,9 @@ function NavItems({ onNavigate }: { onNavigate?: () => void }) {
       </NavLink>
       <NavLink to="/admin/applicants" className={navItem} onClick={onNavigate}>
         <Search className="h-4 w-4" /> Applicants
+      </NavLink>
+      <NavLink to="/admin/export" className={navItem} onClick={onNavigate}>
+        <Download className="h-4 w-4" /> Export
       </NavLink>
       {role && canManageStaff(role) && (
         <NavLink to="/admin/users" className={navItem} onClick={onNavigate}>

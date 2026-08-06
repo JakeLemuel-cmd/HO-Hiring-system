@@ -16,6 +16,7 @@ import { SettingsPage } from "@/pages/admin/SettingsPage";
 import { AuditLogsPage } from "@/pages/admin/AuditLogsPage";
 import { ApplicantsPage } from "@/pages/admin/ApplicantsPage";
 import { ApplicantProfilePage } from "@/pages/admin/ApplicantProfilePage";
+import { ExportPage } from "@/pages/admin/ExportPage";
 
 import { ExamRegisterPage } from "@/pages/public/ExamRegisterPage";
 import { ExamInstructionsPage } from "@/pages/public/ExamInstructionsPage";
@@ -39,6 +40,7 @@ export default function App() {
           <Route path="/admin/examinations" element={<ExaminationsPage />} />
           <Route path="/admin/applicants" element={<ApplicantsPage />} />
           <Route path="/admin/applicants/:applicantId" element={<ApplicantProfilePage />} />
+          <Route path="/admin/export" element={<ExportPage />} />
 
           <Route element={<RoleGuard allow={["admin"]} />}>
             <Route path="/admin/users" element={<UsersPage />} />
