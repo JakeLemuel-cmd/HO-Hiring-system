@@ -152,6 +152,7 @@ export function ExamBuilderTab({ category }: { category: CategoryDocument }) {
   const showQuestionsCard = isOpenForEditing || editMode;
 
   async function updateQuestion(q: ExamQuestion) {
+    setQuestions((prev) => prev.map((existing) => (existing.id === q.id ? q : existing)));
     await saveQuestion(examId!, q);
   }
 
