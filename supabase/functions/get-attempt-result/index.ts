@@ -25,6 +25,7 @@ function computePartBreakdown(
   }
   return parts.map((part, i) => {
     const total = part.reduce((sum, q) => sum + (q.points ?? 0), 0);
+    const pending = part[0].question_type === "essay" && part.some((q) => essayScores[q.id] === undefined);
     const earned = part.reduce((sum, q) => {
       if (q.question_type === "essay") return sum + (essayScores[q.id] ?? 0);
       const given = answers[q.id];
@@ -34,7 +35,12 @@ function computePartBreakdown(
           : given === q.correct_option_id;
       return sum + (isCorrect ? q.points ?? 0 : 0);
     }, 0);
-    return { label: `Part ${i + 1}: ${QUESTION_TYPE_LABELS[part[0].question_type] ?? part[0].question_type}`, earned, total };
+    return {
+      label: `Part ${i + 1}: ${QUESTION_TYPE_LABELS[part[0].question_type] ?? part[0].question_type}`,
+      earned,
+      total,
+      pending,
+    };
   });
 }
 
@@ -70,6 +76,7 @@ Deno.serve(async (req) => {
         examId: a.exam_id,
         attemptNumber: a.attempt_number,
         status: a.status,
+        startedAt: a.started_at ?? undefined,
         submittedAt: a.submitted_at ?? undefined,
         earnedPoints: a.earned_points ?? undefined,
         totalPoints: a.total_points ?? undefined,
@@ -84,16 +91,17 @@ Deno.serve(async (req) => {
         firstName: applicant.first_name,
         lastName: applicant.last_name,
         email: applicant.email,
+        mobileNumber: applicant.mobile_number,
         applicantReferenceNumber: applicant.applicant_reference_number ?? undefined,
       },
       category: {
         id: category.id,
         name: category.name,
-        positionTitle: category.position_title,
       },
       exam: {
         id: exam.id,
         title: exam.title,
+        positionTitle: exam.position_title,
       },
     });
   } catch (err) {

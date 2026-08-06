@@ -149,7 +149,15 @@ export function ResultReviewDialog({
                         max={q.points}
                         className="h-8 w-20"
                         value={scores[q.id] ?? ""}
-                        onChange={(e) => setScores((prev) => ({ ...prev, [q.id]: e.target.value }))}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          if (raw === "" || Number.isNaN(Number(raw))) {
+                            setScores((prev) => ({ ...prev, [q.id]: raw }));
+                            return;
+                          }
+                          const clamped = Math.min(Math.max(Number(raw), 0), q.points);
+                          setScores((prev) => ({ ...prev, [q.id]: String(clamped) }));
+                        }}
                       />
                     </div>
                   </div>

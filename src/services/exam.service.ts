@@ -19,6 +19,8 @@ function mapExam(row: any): ExamDocument {
     id: row.id,
     categoryId: row.category_id,
     title: row.title,
+    positionTitle: row.position_title,
+    department: row.department,
     instructions: row.instructions,
     publicCode: row.public_code ?? "",
     publicSlug: row.public_slug ?? "",
@@ -64,7 +66,7 @@ export function subscribeToAllExams(callback: (exams: ExamListItem[]) => void) {
   async function load() {
     const { data } = await supabase
       .from("exams")
-      .select("*, categories(name, position_title)")
+      .select("*, categories(name)")
       .not("public_code", "is", null)
       .order("published_at", { ascending: false });
     const exams = data ?? [];
@@ -82,7 +84,6 @@ export function subscribeToAllExams(callback: (exams: ExamListItem[]) => void) {
       exams.map((row: any) => ({
         ...mapExam(row),
         categoryName: row.categories?.name ?? "",
-        positionTitle: row.categories?.position_title ?? "",
         applicantCount: applicantCountByExamId.get(row.id) ?? 0,
       }))
     );
@@ -258,27 +259,36 @@ export function subscribeToExamSets(categoryId: string, callback: (exams: ExamDo
   };
 }
 
-/** Creates a new draft exam set for the category — a category may hold multiple sets.
- *  Passing score, duration, and max attempts are seeded from the category's own settings. */
+/** Creates a new draft exam set for the category — a category may hold multiple sets, each for
+ *  a different role, so title/position/department/passing score/duration/max attempts are all
+ *  set per exam set rather than inherited from the category. */
 export async function createExamSet(
   categoryId: string,
-  title: string,
   userId: string,
-  defaults?: { passingScore?: number; durationMinutes?: number; maximumAttempts?: number }
+  settings: {
+    title: string;
+    positionTitle: string;
+    department: string;
+    passingScore: number;
+    durationMinutes: number;
+    maximumAttempts: number;
+  }
 ): Promise<string> {
   const { data, error } = await supabase
     .from("exams")
     .insert({
       category_id: categoryId,
-      title,
+      title: settings.title,
+      position_title: settings.positionTitle,
+      department: settings.department,
       instructions:
         "Read each question carefully and select the best answer. You may not go back once you submit.",
-      passing_score: defaults?.passingScore ?? 70,
+      passing_score: settings.passingScore,
       availability_status: "draft",
       has_time_limit: true,
-      duration_minutes: defaults?.durationMinutes ?? 30,
+      duration_minutes: settings.durationMinutes,
       timezone: "Asia/Manila",
-      maximum_attempts: defaults?.maximumAttempts ?? 1,
+      maximum_attempts: settings.maximumAttempts,
       close_exam_behavior: "allow_active_attempts_to_finish",
       created_by: userId,
     })
@@ -286,6 +296,30 @@ export async function createExamSet(
     .single();
   if (error) throw error;
   return data.id as string;
+}
+
+/** Updates an exam set's title/position/department/passing score/max attempts. */
+export async function updateExamSettings(
+  examId: string,
+  settings: Partial<{
+    title: string;
+    positionTitle: string;
+    department: string;
+    passingScore: number;
+    maximumAttempts: number;
+  }>
+) {
+  const { error } = await supabase
+    .from("exams")
+    .update({
+      ...(settings.title !== undefined && { title: settings.title }),
+      ...(settings.positionTitle !== undefined && { position_title: settings.positionTitle }),
+      ...(settings.department !== undefined && { department: settings.department }),
+      ...(settings.passingScore !== undefined && { passing_score: settings.passingScore }),
+      ...(settings.maximumAttempts !== undefined && { maximum_attempts: settings.maximumAttempts }),
+    })
+    .eq("id", examId);
+  if (error) throw error;
 }
 
 /** Permanently removes a draft exam set (and its questions, via cascade). Published sets should be closed, not deleted. */

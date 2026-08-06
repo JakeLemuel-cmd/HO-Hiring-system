@@ -15,13 +15,17 @@ export const loginSchema = z.object({
 
 export const categorySchema = z.object({
   name: z.string().trim().min(1, "Category name is required."),
+  status: z.enum(["draft", "active", "closed", "archived"]).default("draft"),
+});
+
+/** Per-exam-set settings — a category can hold multiple exam sets, each for a different role. */
+export const examSetSchema = z.object({
+  title: z.string().trim().min(1, "Title is required."),
   positionTitle: z.string().trim().min(1, "Position title is required."),
   department: z.string().trim().min(1, "Department is required."),
-  description: z.string().trim().optional().default(""),
   passingScore: z.coerce.number().min(0).max(100),
   durationMinutes: z.coerce.number().min(1, "Duration must be greater than zero."),
   maximumAttempts: z.coerce.number().min(1),
-  status: z.enum(["draft", "active", "closed", "archived"]).default("draft"),
 });
 
 export const questionTypeEnum = z.enum(["multiple_choice", "true_false", "fill_blank", "essay"]);
@@ -106,5 +110,6 @@ export const applicantRegistrationSchema = z.object({
 
 export type ApplicantRegistrationInput = z.infer<typeof applicantRegistrationSchema>;
 export type CategoryInput = z.infer<typeof categorySchema>;
+export type ExamSetInput = z.infer<typeof examSetSchema>;
 export type ExamQuestionInput = z.infer<typeof examQuestionSchema>;
 export type ExamBuilderSetupInput = z.infer<typeof examBuilderSetupSchema>;

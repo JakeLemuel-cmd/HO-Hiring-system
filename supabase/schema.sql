@@ -48,17 +48,13 @@ returns boolean language sql stable security definer set search_path = public as
 $$;
 
 -- ---------------------------------------------------------------------------
--- categories
+-- categories — a pure department-level grouping; position-specific detail
+-- (title, position, department, passing score, duration, max attempts) lives on
+-- each of its exam sets, since one category can hire for multiple roles at once.
 -- ---------------------------------------------------------------------------
 create table if not exists categories (
   id uuid primary key default gen_random_uuid(),
   name text not null,
-  position_title text not null,
-  department text not null,
-  description text not null default '',
-  passing_score int not null default 70 check (passing_score between 0 and 100),
-  duration_minutes int not null default 30 check (duration_minutes > 0),
-  maximum_attempts int not null default 1 check (maximum_attempts > 0),
   status text not null default 'draft' check (status in ('draft', 'active', 'closed', 'archived')),
   opening_date timestamptz,
   closing_date timestamptz,
@@ -68,12 +64,14 @@ create table if not exists categories (
 );
 
 -- ---------------------------------------------------------------------------
--- exams (a category may have multiple exams/"sets")
+-- exams (a category may have multiple exams/"sets", each for a different role)
 -- ---------------------------------------------------------------------------
 create table if not exists exams (
   id uuid primary key default gen_random_uuid(),
   category_id uuid not null references categories (id) on delete cascade,
   title text not null,
+  position_title text not null default '',
+  department text not null default '',
   instructions text not null default '',
   public_code text unique,
   public_slug text,

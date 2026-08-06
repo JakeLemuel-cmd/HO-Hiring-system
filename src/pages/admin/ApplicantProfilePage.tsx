@@ -14,6 +14,7 @@ import type { ApplicantDocument, CategoryDocument, ExamAttemptDocument } from "@
 interface EnrichedAttempt {
   attempt: ExamAttemptDocument;
   category: CategoryDocument | null;
+  exam: { title: string; positionTitle: string } | null;
 }
 
 function mapApplicant(row: any): ApplicantDocument {
@@ -50,7 +51,17 @@ export function ApplicantProfilePage() {
       const enriched = await Promise.all(
         list
           .filter((a) => a.status === "completed")
-          .map(async (attempt) => ({ attempt, category: await getCategory(attempt.categoryId) }))
+          .map(async (attempt) => {
+            const [category, { data: examRow }] = await Promise.all([
+              getCategory(attempt.categoryId),
+              supabase.from("exams").select("title, position_title").eq("id", attempt.examId).maybeSingle(),
+            ]);
+            return {
+              attempt,
+              category,
+              exam: examRow ? { title: examRow.title, positionTitle: examRow.position_title } : null,
+            };
+          })
       );
       setAttempts(enriched);
     });
@@ -59,7 +70,7 @@ export function ApplicantProfilePage() {
   if (!applicant) return null;
 
   async function downloadIndividual(row: EnrichedAttempt) {
-    const { attempt, category } = row;
+    const { attempt, category, exam } = row;
     const { data: questions } = await supabase
       .from("exam_questions")
       .select("id, order, question_type, points, correct_option_id, correct_answer_text")
@@ -77,18 +88,24 @@ export function ApplicantProfilePage() {
       attempt.essayScores
     );
 
+    const examDurationSeconds =
+      attempt.startedAt && attempt.submittedAt
+        ? Math.round((new Date(attempt.submittedAt).getTime() - new Date(attempt.startedAt).getTime()) / 1000)
+        : null;
     const { blob, filename } = await generateResultPdf({
       applicantName: `${applicant!.firstName} ${applicant!.lastName}`,
+      contactNumber: applicant!.mobileNumber,
       email: applicant!.email,
       applicantReferenceNumber: applicant!.applicantReferenceNumber,
       categoryName: category?.name ?? "",
-      positionTitle: category?.positionTitle ?? "",
-      examTitle: `${category?.name ?? ""} Examination`,
+      positionTitle: exam?.positionTitle ?? "",
+      examTitle: exam?.title ?? category?.name ?? "",
       examDate: attempt.submittedAt ? new Date(attempt.submittedAt).toLocaleDateString() : "",
+      examDurationSeconds,
       rawScore: attempt.earnedPoints ?? 0,
       totalPoints: attempt.totalPoints ?? 0,
-      percentage: attempt.percentage ?? 0,
-      result: attempt.result ?? "failed",
+      percentage: attempt.needsReview ? null : attempt.percentage ?? 0,
+      result: attempt.needsReview ? null : attempt.result ?? "failed",
       attemptNumber: attempt.attemptNumber,
       resultReferenceNumber: attempt.resultReferenceNumber ?? "",
       verificationUrl: `${PUBLIC_APP_URL}/exam/verify/${attempt.resultReferenceNumber}`,
@@ -97,14 +114,14 @@ export function ApplicantProfilePage() {
     downloadBlob(blob, filename);
   }
 
-  function downloadConsolidated() {
-    const { blob, filename } = generateApplicantHistoryPdf({
+  async function downloadConsolidated() {
+    const { blob, filename } = await generateApplicantHistoryPdf({
       applicantName: `${applicant!.firstName} ${applicant!.lastName}`,
       email: applicant!.email,
       applicantReferenceNumber: applicant!.applicantReferenceNumber,
-      attempts: attempts.map(({ attempt, category }) => ({
+      attempts: attempts.map(({ attempt, category, exam }) => ({
         categoryName: category?.name ?? "",
-        positionTitle: category?.positionTitle ?? "",
+        positionTitle: exam?.positionTitle ?? "",
         percentage: attempt.percentage ?? 0,
         result: attempt.result ?? "failed",
         examDate: attempt.submittedAt ? new Date(attempt.submittedAt).toLocaleDateString() : "",
@@ -132,12 +149,18 @@ export function ApplicantProfilePage() {
             <CardContent className="flex items-center justify-between p-4">
               <div>
                 <p className="font-medium text-foreground">
-                  {i + 1}. {row.category?.name} — {row.category?.positionTitle}
+                  {i + 1}. {row.category?.name} — {row.exam?.positionTitle}
                 </p>
                 <p className="mt-0.5 flex items-center gap-1.5 text-sm text-muted-foreground">
-                  Score: {row.attempt.percentage}% ·{" "}
-                  {row.attempt.result && <StatusBadge status={row.attempt.result} />} · Attempt #
-                  {row.attempt.attemptNumber}
+                  {row.attempt.needsReview ? (
+                    <StatusBadge status="pending_review" />
+                  ) : (
+                    <>
+                      Score: {row.attempt.percentage}% ·{" "}
+                      {row.attempt.result && <StatusBadge status={row.attempt.result} />}
+                    </>
+                  )}{" "}
+                  · Attempt #{row.attempt.attemptNumber}
                 </p>
               </div>
               <Button variant="link" size="sm" className="h-auto p-0" onClick={() => downloadIndividual(row)}>

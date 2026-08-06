@@ -21,8 +21,7 @@ async function scoreAndFinalize(
     };
   }
 
-  const [{ data: category }, { data: exam }, { data: questions }] = await Promise.all([
-    admin.from("categories").select("passing_score").eq("id", attempt.category_id).single(),
+  const [{ data: exam }, { data: questions }] = await Promise.all([
     admin.from("exams").select("passing_score").eq("id", attempt.exam_id).single(),
     admin
       .from("exam_questions")
@@ -49,7 +48,7 @@ async function scoreAndFinalize(
     if (isCorrect) earnedPoints += q.points ?? 0;
   }
 
-  const passingScore = category?.passing_score ?? exam?.passing_score ?? 70;
+  const passingScore = exam?.passing_score ?? 70;
   const percentage = hasEssay ? null : totalPoints > 0 ? Math.round((earnedPoints / totalPoints) * 100) : 0;
   const result = hasEssay ? null : percentage! >= passingScore ? "passed" : "failed";
   const resultReferenceNumber = randomReferenceNumber();

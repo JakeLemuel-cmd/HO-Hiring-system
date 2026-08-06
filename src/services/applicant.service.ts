@@ -86,7 +86,7 @@ export function subscribeToAllAttemptResults(callback: (rows: AttemptResultRow[]
   async function load() {
     const { data } = await supabase
       .from("exam_attempts")
-      .select("*, applicants(first_name, last_name), categories(name, position_title)")
+      .select("*, applicants(first_name, last_name), categories(name), exams(position_title)")
       .eq("status", "completed")
       .order("submitted_at", { ascending: false });
     callback(
@@ -96,7 +96,7 @@ export function subscribeToAllAttemptResults(callback: (rows: AttemptResultRow[]
         applicantName: `${row.applicants?.first_name ?? ""} ${row.applicants?.last_name ?? ""}`.trim(),
         categoryId: row.category_id,
         categoryName: row.categories?.name ?? "",
-        positionTitle: row.categories?.position_title ?? "",
+        positionTitle: row.exams?.position_title ?? "",
         examId: row.exam_id,
         status: row.status,
         result: row.result ?? undefined,

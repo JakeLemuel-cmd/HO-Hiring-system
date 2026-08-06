@@ -27,6 +27,7 @@ function mapAttempt(row: any): ExamAttemptDocument {
     percentage: row.percentage ?? undefined,
     result: row.result ?? undefined,
     resultReferenceNumber: row.result_reference_number ?? undefined,
+    startedAt: row.started_at ?? undefined,
     submittedAt: row.submitted_at ?? undefined,
     needsReview: row.needs_review ?? false,
     essayScores: row.essay_scores ?? undefined,
@@ -90,14 +91,19 @@ export function ExportPage() {
       const applicantsById = new Map<string, ApplicantDocument>();
       (applicantRows ?? []).forEach((row) => applicantsById.set(row.id, mapApplicant(row)));
 
-      // A category may have multiple exam sets — fetch each distinct exam's questions once
-      // and reuse the breakdown logic per attempt.
+      // A category may have multiple exam sets — fetch each distinct exam's own details
+      // (title/position) and questions once, and reuse them per attempt.
       const examIds = Array.from(new Set(attempts.map((a) => a.examId)));
-      const { data: allQuestions } = await supabase
-        .from("exam_questions")
-        .select("id, exam_id, order, question_type, points, correct_option_id, correct_answer_text")
-        .in("exam_id", examIds)
-        .order("order", { ascending: true });
+      const [{ data: examRows }, { data: allQuestions }] = await Promise.all([
+        supabase.from("exams").select("id, title, position_title").in("id", examIds),
+        supabase
+          .from("exam_questions")
+          .select("id, exam_id, order, question_type, points, correct_option_id, correct_answer_text")
+          .in("exam_id", examIds)
+          .order("order", { ascending: true }),
+      ]);
+      const examsById = new Map<string, { title: string; positionTitle: string }>();
+      (examRows ?? []).forEach((e) => examsById.set(e.id, { title: e.title, positionTitle: e.position_title }));
       const questionsByExamId = new Map<string, typeof allQuestions>();
       (allQuestions ?? []).forEach((q) => {
         const list = questionsByExamId.get(q.exam_id) ?? [];
@@ -124,14 +130,22 @@ export function ExportPage() {
           attempt.essayScores
         );
 
+        const examDurationSeconds =
+          attempt.startedAt && attempt.submittedAt
+            ? Math.round((new Date(attempt.submittedAt).getTime() - new Date(attempt.startedAt).getTime()) / 1000)
+            : null;
+        const examInfo = examsById.get(attempt.examId);
+
         const { blob, filename } = await generateResultPdf({
           applicantName: `${applicant.firstName} ${applicant.lastName}`,
+          contactNumber: applicant.mobileNumber,
           email: applicant.email,
           applicantReferenceNumber: applicant.applicantReferenceNumber,
           categoryName: category.name,
-          positionTitle: category.positionTitle,
-          examTitle: `${category.name} Examination`,
+          positionTitle: examInfo?.positionTitle ?? "",
+          examTitle: examInfo?.title ?? category.name,
           examDate: attempt.submittedAt ? new Date(attempt.submittedAt).toLocaleDateString() : "",
+          examDurationSeconds,
           rawScore: attempt.earnedPoints ?? 0,
           totalPoints: attempt.totalPoints ?? 0,
           percentage: attempt.percentage ?? 0,
@@ -146,7 +160,7 @@ export function ExportPage() {
       }
 
       const zipBlob = await zip.generateAsync({ type: "blob" });
-      const zipFilename = `${category.name} - ${category.positionTitle}.zip`;
+      const zipFilename = `${category.name}.zip`;
       const url = URL.createObjectURL(zipBlob);
       const a = document.createElement("a");
       a.href = url;
@@ -186,7 +200,7 @@ export function ExportPage() {
                   <SelectContent>
                     {categories.map((c) => (
                       <SelectItem key={c.id} value={c.id}>
-                        {c.name} — {c.positionTitle}
+                        {c.name}
                       </SelectItem>
                     ))}
                   </SelectContent>

@@ -16,15 +16,12 @@ export interface UserDocument {
 
 export type CategoryStatus = "draft" | "active" | "closed" | "archived";
 
+/** A category is a department-level grouping only — position-specific detail
+ *  (title, department, passing score, duration, max attempts) lives on each of its exam sets,
+ *  since one category can hire for multiple roles at once. */
 export interface CategoryDocument {
   id: string;
   name: string;
-  positionTitle: string;
-  department: string;
-  description: string;
-  passingScore: number;
-  durationMinutes: number;
-  maximumAttempts: number;
   status: CategoryStatus;
   openingDate?: Timestamp;
   closingDate?: Timestamp;
@@ -80,6 +77,8 @@ export interface ExamDocument {
   id: string;
   categoryId: string;
   title: string;
+  positionTitle: string;
+  department: string;
   instructions: string;
 
   publicCode: string;
@@ -114,7 +113,6 @@ export interface ExamDocument {
 
 export interface ExamListItem extends ExamDocument {
   categoryName: string;
-  positionTitle: string;
   applicantCount: number;
 }
 
@@ -197,7 +195,7 @@ export interface ExamAttemptDocument {
   /** Manually assigned score per essay question, keyed by question id. */
   essayScores?: Record<string, number>;
   /** Per-part score breakdown (Part 1: Multiple Choice — 5/10, etc.), when available. */
-  parts?: { label: string; earned: number; total: number }[];
+  parts?: { label: string; earned: number; total: number; pending?: boolean }[];
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -249,6 +247,7 @@ export interface CategoryStatistics {
   highestScore: number;
   lowestScore: number;
   passRate: number;
+  pendingReviewCount: number;
 }
 
 export const EMPTY_CATEGORY_STATISTICS: CategoryStatistics = {
@@ -261,4 +260,5 @@ export const EMPTY_CATEGORY_STATISTICS: CategoryStatistics = {
   highestScore: 0,
   lowestScore: 0,
   passRate: 0,
+  pendingReviewCount: 0,
 };

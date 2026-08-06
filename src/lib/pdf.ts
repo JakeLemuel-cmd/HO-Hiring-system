@@ -41,8 +41,21 @@ async function loadCroppedImageDataUrl(url: string): Promise<string> {
   return cropCanvas.toDataURL("image/png");
 }
 
+/** Formats a duration in seconds as e.g. "1h 12m 34s" / "12m 34s" / "34s". */
+function formatDuration(totalSeconds: number): string {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = Math.floor(totalSeconds % 60);
+  const parts: string[] = [];
+  if (h > 0) parts.push(`${h}h`);
+  if (h > 0 || m > 0) parts.push(`${m}m`);
+  parts.push(`${s}s`);
+  return parts.join(" ");
+}
+
 export interface ResultPdfData {
   applicantName: string;
+  contactNumber: string;
   email: string;
   applicantReferenceNumber?: string;
   categoryName: string;
@@ -51,13 +64,16 @@ export interface ResultPdfData {
   examDate: string;
   rawScore: number;
   totalPoints: number;
-  percentage: number;
-  result: "passed" | "failed";
+  /** Seconds between the applicant starting and submitting the exam; null if unknown. */
+  examDurationSeconds: number | null;
+  /** Null when the exam has essay questions still awaiting a manual score. */
+  percentage: number | null;
+  result: "passed" | "failed" | null;
   attemptNumber: number;
   resultReferenceNumber: string;
   verificationUrl: string;
   /** Per-part score breakdown (e.g. "Part 1: Multiple Choice" — 5/10), shown above the overall score. */
-  parts?: { label: string; earned: number; total: number }[];
+  parts?: { label: string; earned: number; total: number; pending?: boolean }[];
 }
 
 export async function generateResultPdf(data: ResultPdfData): Promise<{ blob: Blob; filename: string }> {
@@ -95,33 +111,35 @@ export async function generateResultPdf(data: ResultPdfData): Promise<{ blob: Bl
     y += 22;
   };
 
+  row("Examinee No.", data.resultReferenceNumber);
   row("Applicant Name", data.applicantName);
+  row("Contact Number", data.contactNumber);
   row("Email Address", data.email);
-  if (data.applicantReferenceNumber) row("Reference Number", data.applicantReferenceNumber);
   row("Hiring Category", data.categoryName);
   row("Position", data.positionTitle);
   row("Examination", data.examTitle);
+  row("Attempt Number", String(data.attemptNumber));
+  row("Exam Duration", data.examDurationSeconds === null ? "—" : formatDuration(data.examDurationSeconds));
   row("Examination Date", data.examDate);
+  row("Percentage", data.percentage === null ? "Pending Review" : `${data.percentage}%`);
+  row("Result", data.result === "passed" ? "Passed" : data.result === "failed" ? "Failed" : "Pending Review");
 
   if (data.parts && data.parts.length > 1) {
     docPdf.setFont("helvetica", "bold");
-    docPdf.text("Score Breakdown:", 40, y);
-    y += 18;
-    docPdf.setFont("helvetica", "normal");
+    docPdf.text("Score Breakdown", 40, y);
+    y += 22;
     docPdf.setFontSize(9);
     for (const part of data.parts) {
-      docPdf.text(`${part.label}: ${part.earned}/${part.total}`, 56, y);
-      y += 16;
+      const value = part.pending ? "Pending Review — awaiting staff score" : `${part.earned}/${part.total}`;
+      docPdf.setFont("helvetica", "bold");
+      docPdf.text(`${part.label}:`, 56, y);
+      docPdf.setFont("helvetica", "normal");
+      docPdf.text(value, 200, y);
+      y += 18;
     }
     docPdf.setFontSize(10);
-    y += 6;
+    y += 4;
   }
-
-  row("Raw Score", `${data.rawScore} out of ${data.totalPoints}`);
-  row("Percentage", `${data.percentage}%`);
-  row("Result", data.result === "passed" ? "Passed" : "Failed");
-  row("Attempt Number", String(data.attemptNumber));
-  row("Examinee No.", data.resultReferenceNumber);
 
   const qrY = headerBottom + 50;
   docPdf.addImage(qrDataUrl, "PNG", 420, qrY, 110, 110);
@@ -147,18 +165,38 @@ export interface ApplicantHistoryPdfData {
   }[];
 }
 
-export function generateApplicantHistoryPdf(data: ApplicantHistoryPdfData): { blob: Blob; filename: string } {
+export async function generateApplicantHistoryPdf(
+  data: ApplicantHistoryPdfData
+): Promise<{ blob: Blob; filename: string }> {
   const docPdf = new jsPDF({ unit: "pt", format: "a4" });
+  const pageWidth = docPdf.internal.pageSize.getWidth();
+
+  let headerBottom = 50;
+  try {
+    const logoDataUrl = await loadCroppedImageDataUrl("/BMPClogo.png");
+    const logoProps = docPdf.getImageProperties(logoDataUrl);
+    const logoWidth = 320;
+    const logoHeight = (logoProps.height * logoWidth) / logoProps.width;
+    docPdf.addImage(logoDataUrl, "PNG", (pageWidth - logoWidth) / 2, 15, logoWidth, logoHeight);
+    headerBottom = 15 + logoHeight + 42;
+  } catch {
+    // Logo failed to load — fall back to text-only header.
+  }
+
   docPdf.setFontSize(18);
   docPdf.setFont("helvetica", "bold");
-  docPdf.text("Complete Examination History", 40, 50);
+  docPdf.text("Complete Examination History", pageWidth / 2, headerBottom, { align: "center" });
   docPdf.setFontSize(10);
   docPdf.setFont("helvetica", "normal");
-  docPdf.text(`${data.applicantName} — ${data.email}`, 40, 68);
-  if (data.applicantReferenceNumber) docPdf.text(`Reference: ${data.applicantReferenceNumber}`, 40, 82);
-  docPdf.line(40, 92, 555, 92);
+  docPdf.text(`${data.applicantName} — ${data.email}`, pageWidth / 2, headerBottom + 18, { align: "center" });
+  let metaBottom = headerBottom + 18;
+  if (data.applicantReferenceNumber) {
+    metaBottom += 14;
+    docPdf.text(`Reference: ${data.applicantReferenceNumber}`, pageWidth / 2, metaBottom, { align: "center" });
+  }
+  docPdf.line(40, metaBottom + 10, 555, metaBottom + 10);
 
-  let y = 120;
+  let y = metaBottom + 38;
   const passed = data.attempts.filter((a) => a.result === "passed").length;
   const avg = data.attempts.length
     ? Math.round(data.attempts.reduce((s, a) => s + a.percentage, 0) / data.attempts.length)

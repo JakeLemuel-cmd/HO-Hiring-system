@@ -16,11 +16,6 @@ export function CategorySettingsTab({ category }: { category: CategoryDocument }
   const navigate = useNavigate();
   const [form, setForm] = useState({
     name: category.name,
-    positionTitle: category.positionTitle,
-    department: category.department,
-    passingScore: category.passingScore,
-    durationMinutes: category.durationMinutes,
-    maximumAttempts: category.maximumAttempts,
     status: category.status,
   });
   const [saving, setSaving] = useState(false);
@@ -48,28 +43,9 @@ export function CategorySettingsTab({ category }: { category: CategoryDocument }
   return (
     <Card className="max-w-xl">
       <CardContent className="space-y-4 pt-6">
-        <Field label="Category Name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
-        <Field label="Position Title" value={form.positionTitle} onChange={(v) => setForm({ ...form, positionTitle: v })} />
-        <Field label="Department" value={form.department} onChange={(v) => setForm({ ...form, department: v })} />
-        <div className="grid grid-cols-3 gap-4">
-          <Field
-            label="Passing Score"
-            type="number"
-            value={String(form.passingScore)}
-            onChange={(v) => setForm({ ...form, passingScore: Number(v) })}
-          />
-          <Field
-            label="Duration (min)"
-            type="number"
-            value={String(form.durationMinutes)}
-            onChange={(v) => setForm({ ...form, durationMinutes: Number(v) })}
-          />
-          <Field
-            label="Max Attempts"
-            type="number"
-            value={String(form.maximumAttempts)}
-            onChange={(v) => setForm({ ...form, maximumAttempts: Number(v) })}
-          />
+        <div className="space-y-1.5">
+          <Label>Category Name</Label>
+          <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </div>
         <div className="space-y-1.5">
           <Label>Status</Label>
@@ -108,24 +84,5 @@ export function CategorySettingsTab({ category }: { category: CategoryDocument }
         onConfirm={remove}
       />
     </Card>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  type = "text",
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  type?: string;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <Label>{label}</Label>
-      <Input type={type} value={value} onChange={(e) => onChange(e.target.value)} />
-    </div>
   );
 }

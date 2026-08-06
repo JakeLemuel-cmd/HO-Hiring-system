@@ -36,6 +36,7 @@ export function ExaminationsPage() {
         cell: ({ row }) => <span className="font-medium text-foreground">{row.original.title}</span>,
       },
       { accessorKey: "categoryName", header: "Category" },
+      { accessorKey: "positionTitle", header: "Position" },
       {
         accessorKey: "availabilityStatus",
         header: "Status",

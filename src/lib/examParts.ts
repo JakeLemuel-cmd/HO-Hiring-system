@@ -4,6 +4,8 @@ export interface PartScore {
   label: string;
   earned: number;
   total: number;
+  /** True when this part contains essay questions that haven't been manually scored yet. */
+  pending?: boolean;
 }
 
 interface GradableQuestion {
@@ -24,6 +26,7 @@ export function computePartBreakdown(
 ): PartScore[] {
   return groupIntoParts(questions).map((part, i) => {
     const total = part.reduce((sum, q) => sum + q.points, 0);
+    const pending = part[0].type === "essay" && part.some((q) => essayScores?.[q.id] === undefined);
     const earned = part.reduce((sum, q) => {
       if (q.type === "essay") return sum + (essayScores?.[q.id] ?? 0);
       const given = answers[q.id];
@@ -33,7 +36,7 @@ export function computePartBreakdown(
           : given === q.correctOptionId;
       return sum + (isCorrect ? q.points : 0);
     }, 0);
-    return { label: `Part ${i + 1}: ${QUESTION_TYPE_LABELS[part[0].type]}`, earned, total };
+    return { label: `Part ${i + 1}: ${QUESTION_TYPE_LABELS[part[0].type]}`, earned, total, pending };
   });
 }
 

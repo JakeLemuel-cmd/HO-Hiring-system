@@ -15,8 +15,7 @@ Deno.serve(async (req) => {
     if (!attempt) return errorResponse("Examination attempt not found.", 404);
     if (attempt.status !== "completed") return errorResponse("This attempt has not been submitted yet.", 409);
 
-    const [{ data: category }, { data: exam }, { data: questions }] = await Promise.all([
-      admin.from("categories").select("passing_score").eq("id", attempt.category_id).single(),
+    const [{ data: exam }, { data: questions }] = await Promise.all([
       admin.from("exams").select("passing_score").eq("id", attempt.exam_id).single(),
       admin.from("exam_questions").select("id, points, question_type").eq("exam_id", attempt.exam_id),
     ]);
@@ -45,7 +44,7 @@ Deno.serve(async (req) => {
     const earnedPoints = (attempt.earned_points ?? 0) - priorEssayEarned + essayEarned;
     const totalPoints = attempt.total_points ?? 0;
     const percentage = totalPoints > 0 ? Math.round((earnedPoints / totalPoints) * 100) : 0;
-    const passingScore = category?.passing_score ?? exam?.passing_score ?? 70;
+    const passingScore = exam?.passing_score ?? 70;
     const result = percentage >= passingScore ? "passed" : "failed";
 
     const { error } = await admin

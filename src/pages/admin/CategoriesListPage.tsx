@@ -29,17 +29,10 @@ export function CategoriesListPage() {
         header: "Name",
         cell: ({ row }) => <span className="font-medium text-foreground">{row.original.name}</span>,
       },
-      { accessorKey: "positionTitle", header: "Position" },
-      { accessorKey: "department", header: "Department" },
       {
         accessorKey: "status",
         header: "Status",
         cell: ({ row }) => <StatusBadge status={row.original.status} />,
-      },
-      {
-        accessorKey: "passingScore",
-        header: "Passing Score",
-        cell: ({ row }) => `${row.original.passingScore}%`,
       },
       {
         id: "actions",

@@ -48,13 +48,18 @@ export function CategoryDetailPage() {
   return (
     <div>
       <Breadcrumbs items={[{ label: "Categories", to: "/admin/categories" }, { label: category.name }]} />
-      <PageHeader title={category.name} description={category.positionTitle} />
+      <PageHeader title={category.name} />
 
       <Tabs value={activeTab} onValueChange={(v) => navigate(`/admin/categories/${categoryId}/${v}`)}>
         <TabsList>
           {TABS.map((t) => (
-            <TabsTrigger key={t} value={t}>
+            <TabsTrigger key={t} value={t} className="gap-1.5">
               {t}
+              {t === "results" && stats.pendingReviewCount > 0 && (
+                <span className="flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-warning px-1 text-[10px] font-semibold leading-none text-warning-foreground">
+                  {stats.pendingReviewCount}
+                </span>
+              )}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -69,7 +74,7 @@ export function CategoryDetailPage() {
           <ApplicantsTab categoryId={categoryId} />
         </TabsContent>
         <TabsContent value="results">
-          <ResultsTab categoryId={categoryId} passingScore={category.passingScore} />
+          <ResultsTab categoryId={categoryId} />
         </TabsContent>
         <TabsContent value="settings">
           <CategorySettingsTab category={category} />

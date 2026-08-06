@@ -12,6 +12,7 @@ import {
   deleteQuestion,
   updateExamTitle,
   updateExamTimeLimit,
+  updateExamSettings,
   regenerateQuestions,
   appendQuestions,
   publishExam,
@@ -94,6 +95,10 @@ export function ExamBuilderTab({
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
 
   const [builderTitle, setBuilderTitle] = useState("");
+  const [builderPositionTitle, setBuilderPositionTitle] = useState("");
+  const [builderDepartment, setBuilderDepartment] = useState("");
+  const [builderPassingScore, setBuilderPassingScore] = useState("70");
+  const [builderMaxAttempts, setBuilderMaxAttempts] = useState("1");
   const [builderHasTimeLimit, setBuilderHasTimeLimit] = useState(true);
   const [builderDuration, setBuilderDuration] = useState("30");
   const [builderType, setBuilderType] = useState<QuestionType>("multiple_choice");
@@ -136,10 +141,41 @@ export function ExamBuilderTab({
   useEffect(() => {
     if (exam) {
       setBuilderTitle(exam.title);
+      setBuilderPositionTitle(exam.positionTitle);
+      setBuilderDepartment(exam.department);
+      setBuilderPassingScore(String(exam.passingScore));
+      setBuilderMaxAttempts(String(exam.maximumAttempts));
       setBuilderHasTimeLimit(exam.hasTimeLimit);
       setBuilderDuration(String(exam.durationMinutes ?? 30));
     }
   }, [exam?.id]);
+
+  function commitSettings(field: "positionTitle" | "department" | "passingScore" | "maximumAttempts", value: string) {
+    if (!exam) return;
+    if (field === "positionTitle") {
+      const trimmed = value.trim();
+      if (!trimmed || trimmed === exam.positionTitle) return;
+      updateExamSettings(examId, { positionTitle: trimmed }).catch(() => toast.error("Failed to update position title."));
+      return;
+    }
+    if (field === "department") {
+      const trimmed = value.trim();
+      if (!trimmed || trimmed === exam.department) return;
+      updateExamSettings(examId, { department: trimmed }).catch(() => toast.error("Failed to update department."));
+      return;
+    }
+    if (field === "passingScore") {
+      const score = Math.min(100, Math.max(0, Number(value) || 0));
+      setBuilderPassingScore(String(score));
+      if (score === exam.passingScore) return;
+      updateExamSettings(examId, { passingScore: score }).catch(() => toast.error("Failed to update passing score."));
+      return;
+    }
+    const attempts = Math.max(1, Number(value) || 1);
+    setBuilderMaxAttempts(String(attempts));
+    if (attempts === exam.maximumAttempts) return;
+    updateExamSettings(examId, { maximumAttempts: attempts }).catch(() => toast.error("Failed to update max attempts."));
+  }
 
   function commitTimeLimit(hasTimeLimit: boolean, durationMinutes: string) {
     const minutes = Math.max(1, Number(durationMinutes) || 30);
@@ -336,7 +372,8 @@ export function ExamBuilderTab({
               <div className="min-w-0">
                 <h3 className="font-semibold text-foreground">{exam.title}</h3>
                 <p className="text-sm text-muted-foreground">
-                  {category.name} · {category.positionTitle}
+                  {category.name} · {exam.positionTitle}
+                  {exam.department && ` · ${exam.department}`}
                 </p>
                 <p className="mt-2 break-all rounded-md bg-muted px-2 py-1 font-mono text-sm text-primary">
                   {displayUrl}
@@ -348,6 +385,7 @@ export function ExamBuilderTab({
                   <span>Time Limit: {exam.hasTimeLimit ? `${exam.durationMinutes} minutes` : "No limit"}</span>
                   <span>Questions: {exam.questionCount}</span>
                   <span>Passing Score: {exam.passingScore}%</span>
+                  <span>Max Attempts: {exam.maximumAttempts}</span>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
                   <Button variant="outline" size="sm" onClick={copyLink}>
@@ -434,6 +472,55 @@ export function ExamBuilderTab({
                 }}
                 placeholder="e.g. IT Support Screening Exam"
               />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="examPosition">Position Title</Label>
+                <Input
+                  id="examPosition"
+                  value={builderPositionTitle}
+                  onChange={(e) => setBuilderPositionTitle(e.target.value)}
+                  onBlur={(e) => commitSettings("positionTitle", e.target.value)}
+                  placeholder="e.g. Software Engineer"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="examDepartment">Department</Label>
+                <Input
+                  id="examDepartment"
+                  value={builderDepartment}
+                  onChange={(e) => setBuilderDepartment(e.target.value)}
+                  onBlur={(e) => commitSettings("department", e.target.value)}
+                  placeholder="e.g. IT"
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="examPassingScore">Passing Score (%)</Label>
+                <Input
+                  id="examPassingScore"
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={builderPassingScore}
+                  onChange={(e) => setBuilderPassingScore(e.target.value)}
+                  onBlur={(e) => commitSettings("passingScore", e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="examMaxAttempts">Max Attempts</Label>
+                <Input
+                  id="examMaxAttempts"
+                  type="number"
+                  min={1}
+                  value={builderMaxAttempts}
+                  onChange={(e) => setBuilderMaxAttempts(e.target.value)}
+                  onBlur={(e) => commitSettings("maximumAttempts", e.target.value)}
+                />
+              </div>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">

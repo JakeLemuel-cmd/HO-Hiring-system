@@ -8,12 +8,6 @@ function mapCategory(row: any): CategoryDocument {
   return {
     id: row.id,
     name: row.name,
-    positionTitle: row.position_title,
-    department: row.department,
-    description: row.description,
-    passingScore: row.passing_score,
-    durationMinutes: row.duration_minutes,
-    maximumAttempts: row.maximum_attempts,
     status: row.status,
     openingDate: row.opening_date ?? undefined,
     closingDate: row.closing_date ?? undefined,
@@ -26,12 +20,6 @@ function mapCategory(row: any): CategoryDocument {
 function toRow(input: Partial<CategoryInput>) {
   return {
     ...(input.name !== undefined && { name: input.name }),
-    ...(input.positionTitle !== undefined && { position_title: input.positionTitle }),
-    ...(input.department !== undefined && { department: input.department }),
-    ...(input.description !== undefined && { description: input.description }),
-    ...(input.passingScore !== undefined && { passing_score: input.passingScore }),
-    ...(input.durationMinutes !== undefined && { duration_minutes: input.durationMinutes }),
-    ...(input.maximumAttempts !== undefined && { maximum_attempts: input.maximumAttempts }),
     ...(input.status !== undefined && { status: input.status }),
   };
 }
@@ -140,9 +128,11 @@ export function subscribeToCategoryStatistics(
 
     const started = attempts.filter((a) => a.status !== "not_started");
     const completed = attempts.filter((a) => a.status === "completed");
-    const passed = completed.filter((a) => a.result === "passed");
-    const failed = completed.filter((a) => a.result === "failed");
-    const scores = completed.map((a) => a.percentage ?? 0);
+    const pendingReview = completed.filter((a) => a.needs_review);
+    const graded = completed.filter((a) => !a.needs_review);
+    const passed = graded.filter((a) => a.result === "passed");
+    const failed = graded.filter((a) => a.result === "failed");
+    const scores = graded.map((a) => a.percentage ?? 0);
 
     callback({
       totalApplicants: new Set(attempts.map((a) => a.applicant_id)).size,
@@ -153,7 +143,8 @@ export function subscribeToCategoryStatistics(
       averageScore: scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0,
       highestScore: scores.length ? Math.max(...scores) : 0,
       lowestScore: scores.length ? Math.min(...scores) : 0,
-      passRate: completed.length ? Math.round((passed.length / completed.length) * 100) : 0,
+      passRate: graded.length ? Math.round((passed.length / graded.length) * 100) : 0,
+      pendingReviewCount: pendingReview.length,
     });
   }
   load();

@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
     return jsonResponse({
       title: exam.title,
       categoryName: category.name,
-      positionTitle: category.position_title,
+      positionTitle: exam.position_title,
       instructions: exam.instructions,
       questionCount: exam.question_count,
       hasTimeLimit: exam.has_time_limit,

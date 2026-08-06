@@ -86,8 +86,7 @@ export function DashboardPage() {
                 <Card className="transition-colors hover:border-primary/50">
                   <CardContent className="p-4">
                     <p className="font-medium text-foreground">{c.name}</p>
-                    <p className="text-sm text-muted-foreground">{c.positionTitle}</p>
-                    <p className="mt-2 text-xs uppercase tracking-wide text-muted-foreground">{c.status}</p>
+                    <p className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">{c.status}</p>
                   </CardContent>
                 </Card>
               </Link>

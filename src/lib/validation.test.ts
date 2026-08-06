@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applicantRegistrationSchema,
   categorySchema,
+  examSetSchema,
   normalizeEmail,
   normalizeFullName,
   publishExamSchema,
@@ -21,9 +22,21 @@ describe("normalizeFullName", () => {
 });
 
 describe("categorySchema", () => {
+  it("requires a category name", () => {
+    const result = categorySchema.safeParse({ name: "" });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts a valid category", () => {
+    const result = categorySchema.safeParse({ name: "ICT Hiring", status: "draft" });
+    expect(result.success).toBe(true);
+  });
+});
+
+describe("examSetSchema", () => {
   it("requires a passing score between 0 and 100", () => {
-    const result = categorySchema.safeParse({
-      name: "ICT Hiring",
+    const result = examSetSchema.safeParse({
+      title: "IT Support Exam",
       positionTitle: "IT Support",
       department: "ICT",
       passingScore: 150,
@@ -33,9 +46,9 @@ describe("categorySchema", () => {
     expect(result.success).toBe(false);
   });
 
-  it("accepts a valid category", () => {
-    const result = categorySchema.safeParse({
-      name: "ICT Hiring",
+  it("accepts a valid exam set", () => {
+    const result = examSetSchema.safeParse({
+      title: "IT Support Exam",
       positionTitle: "IT Support",
       department: "ICT",
       passingScore: 70,

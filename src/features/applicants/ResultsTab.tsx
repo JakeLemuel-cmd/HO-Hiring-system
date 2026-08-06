@@ -43,7 +43,7 @@ function mapApplicant(row: any): ApplicantDocument {
   };
 }
 
-export function ResultsTab({ categoryId, passingScore }: { categoryId: string; passingScore: number }) {
+export function ResultsTab({ categoryId }: { categoryId: string }) {
   const [attempts, setAttempts] = useState<ExamAttemptDocument[]>([]);
   const [applicantsById, setApplicantsById] = useState<Map<string, ApplicantDocument>>(new Map());
   const [reviewingAttempt, setReviewingAttempt] = useState<ExamAttemptDocument | null>(null);
@@ -86,7 +86,7 @@ export function ResultsTab({ categoryId, passingScore }: { categoryId: string; p
     return (
       <EmptyState
         title="No results yet"
-        description={`Results will appear once applicants complete the examination. Passing score is set to ${passingScore}%.`}
+        description="Results will appear here once applicants complete an examination in this category."
       />
     );
   }
@@ -101,6 +101,7 @@ export function ResultsTab({ categoryId, passingScore }: { categoryId: string; p
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead>Applicant Name</TableHead>
             <TableHead>Examinee No.</TableHead>
             <TableHead>Score</TableHead>
             <TableHead>Percentage</TableHead>
@@ -112,6 +113,7 @@ export function ResultsTab({ categoryId, passingScore }: { categoryId: string; p
         <TableBody>
           {attempts.map((a) => (
             <TableRow key={a.id}>
+              <TableCell className="font-medium text-foreground">{applicantName(a.applicantId)}</TableCell>
               <TableCell className="font-mono text-xs">{a.resultReferenceNumber}</TableCell>
               <TableCell>{a.earnedPoints} / {a.totalPoints}</TableCell>
               <TableCell>{a.percentage}%</TableCell>
