@@ -302,4 +302,16 @@ grant usage on schema public to authenticated;
 grant select, insert, update, delete on all tables in schema public to authenticated;
 grant usage, select on all sequences in schema public to authenticated;
 alter default privileges in schema public grant select, insert, update, delete on tables to authenticated;
+
+-- =============================================================================
+-- Sequential examinee numbers (EX-000001, EX-000002, ...)
+-- =============================================================================
+create sequence if not exists exam_attempt_reference_seq;
+
+create or replace function next_examinee_number()
+returns text
+language sql
+as $$
+  select 'EX-' || lpad(nextval('exam_attempt_reference_seq')::text, 6, '0');
+$$;
 alter default privileges in schema public grant usage, select on sequences to authenticated;

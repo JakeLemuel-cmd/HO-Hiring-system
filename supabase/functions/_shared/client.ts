@@ -39,11 +39,6 @@ export async function requireAdmin(authHeader: string | null) {
   return result;
 }
 
-export function randomReferenceNumber(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  return Array.from({ length: 5 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
-}
-
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }

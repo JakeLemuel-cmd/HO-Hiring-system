@@ -1,4 +1,4 @@
-import { adminClient, randomReferenceNumber } from "../_shared/client.ts";
+import { adminClient } from "../_shared/client.ts";
 import { corsHeaders, errorResponse, jsonResponse } from "../_shared/cors.ts";
 
 type SubmissionReason = "applicant_submitted" | "time_expired" | "exam_closed_by_staff";
@@ -51,7 +51,8 @@ async function scoreAndFinalize(
   const passingScore = exam?.passing_score ?? 70;
   const percentage = hasEssay ? null : totalPoints > 0 ? Math.round((earnedPoints / totalPoints) * 100) : 0;
   const result = hasEssay ? null : percentage! >= passingScore ? "passed" : "failed";
-  const resultReferenceNumber = randomReferenceNumber();
+  const { data: resultReferenceNumber, error: refError } = await admin.rpc("next_examinee_number");
+  if (refError) throw refError;
 
   const { error } = await admin
     .from("exam_attempts")
