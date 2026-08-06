@@ -53,9 +53,14 @@ export function ExamTakePage() {
   useEffect(() => {
     if (!attemptId) return;
     invokeFunction<{ attempt: ExamAttemptDocument }>("get-attempt-state", { attemptId }).then((result) => {
+      if (result.attempt.status !== "in_progress") {
+        navigate(`/exam/${publicCode}/result/${attemptId}`, { replace: true });
+        return;
+      }
       setAttempt(result.attempt);
       if (result.attempt.answers) setAnswers(result.attempt.answers);
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attemptId]);
 
   // Questions are fetched through an Edge Function so applicants never receive correctOptionId —
@@ -134,7 +139,7 @@ export function ExamTakePage() {
     setConfirmOpen(false);
     const result = await submitExamAttempt(attemptId, answers);
     setSubmitted(true);
-    navigate(`/exam/${publicCode}/result/${result.attemptId}`, { state: { autoSubmitted: isAutoSubmit } });
+    navigate(`/exam/${publicCode}/result/${result.attemptId}`, { state: { autoSubmitted: isAutoSubmit }, replace: true });
   }
 
   const pages = useMemo(() => groupIntoPages(questions), [questions]);
