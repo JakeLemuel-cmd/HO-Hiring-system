@@ -224,7 +224,7 @@ export function ExamBuilderTab({
     }
     setAdding(true);
     try {
-      const startOrder = questions.length + 1;
+      const startOrder = questions.length === 0 ? 1 : Math.max(...questions.map((q) => q.order)) + 1;
       const generated = Array.from({ length: parsed.data.numberOfQuestions }, (_, i) =>
         newQuestion(startOrder + i, parsed.data.questionType)
       );
@@ -265,25 +265,27 @@ export function ExamBuilderTab({
       setPublishError("Generate at least one question before publishing.");
       return;
     }
-    for (const q of questions) {
+    for (let i = 0; i < questions.length; i++) {
+      const q = questions[i];
+      const displayNumber = i + 1;
       if (!q.questionText.trim()) {
-        setPublishError(`Question ${q.order} is missing question text.`);
+        setPublishError(`Question ${displayNumber} is missing question text.`);
         return;
       }
       if (q.type === "essay") continue;
       if (q.type === "fill_blank") {
         if (!q.correctAnswerText.trim()) {
-          setPublishError(`Question ${q.order} needs a correct answer entered.`);
+          setPublishError(`Question ${displayNumber} needs a correct answer entered.`);
           return;
         }
         continue;
       }
       if (q.options.length < 2 || q.options.some((o) => !o.text.trim())) {
-        setPublishError(`Question ${q.order} needs at least two non-empty answer options.`);
+        setPublishError(`Question ${displayNumber} needs at least two non-empty answer options.`);
         return;
       }
       if (!q.options.some((o) => o.id === q.correctOptionId)) {
-        setPublishError(`Question ${q.order} needs a correct answer selected.`);
+        setPublishError(`Question ${displayNumber} needs a correct answer selected.`);
         return;
       }
     }
@@ -508,7 +510,7 @@ export function ExamBuilderTab({
               <div className="flex items-center justify-between rounded-md border border-dashed border-border p-3">
                 <p className="text-sm text-muted-foreground">
                   {questions.length} question{questions.length === 1 ? "" : "s"} generated. Add another batch to
-                  continue numbering from Question {questions.length + 1}.
+                  continue the exam.
                 </p>
                 <Button variant="outline" size="sm" onClick={openAddMore}>
                   <Plus className="h-4 w-4" /> Add More Questions
@@ -529,25 +531,32 @@ export function ExamBuilderTab({
             )}
 
             <div className="space-y-6">
-              {groupIntoParts(questions).map((part, i) => (
-                <div key={part[0].id} className="space-y-4">
-                  <div className="rounded-md border border-border bg-muted/40 p-3">
-                    <p className="text-sm font-semibold text-foreground">
-                      Part {i + 1}: {QUESTION_TYPE_LABELS[part[0].type]}
-                    </p>
-                    <p className="mt-1 text-sm text-muted-foreground">{QUESTION_TYPE_DIRECTIONS[part[0].type]}</p>
+              {(() => {
+                let displayNumber = 0;
+                return groupIntoParts(questions).map((part, i) => (
+                  <div key={part[0].id} className="space-y-4">
+                    <div className="rounded-md border border-border bg-muted/40 p-3">
+                      <p className="text-sm font-semibold text-foreground">
+                        Part {i + 1}: {QUESTION_TYPE_LABELS[part[0].type]}
+                      </p>
+                      <p className="mt-1 text-sm text-muted-foreground">{QUESTION_TYPE_DIRECTIONS[part[0].type]}</p>
+                    </div>
+                    {part.map((q) => {
+                      displayNumber += 1;
+                      return (
+                        <QuestionEditor
+                          key={q.id}
+                          question={q}
+                          displayNumber={displayNumber}
+                          disabled={!canEditFields}
+                          onChange={updateQuestion}
+                          onDelete={() => removeQuestion(q.id)}
+                        />
+                      );
+                    })}
                   </div>
-                  {part.map((q) => (
-                    <QuestionEditor
-                      key={q.id}
-                      question={q}
-                      disabled={!canEditFields}
-                      onChange={updateQuestion}
-                      onDelete={() => removeQuestion(q.id)}
-                    />
-                  ))}
-                </div>
-              ))}
+                ));
+              })()}
             </div>
 
             {isOpenForEditing && questions.length > 0 && (
@@ -642,11 +651,13 @@ const OPTION_LETTERS = ["A", "B", "C", "D", "E", "F"];
 
 function QuestionEditor({
   question,
+  displayNumber,
   disabled,
   onChange,
   onDelete,
 }: {
   question: ExamQuestion;
+  displayNumber: number;
   disabled: boolean;
   onChange: (q: ExamQuestion) => void;
   onDelete: () => void;
@@ -694,7 +705,7 @@ function QuestionEditor({
     <div className="rounded-md border border-border p-4">
       <div className="mb-2 flex items-center justify-between">
         <span className="flex items-center gap-2 text-sm font-medium text-foreground">
-          <GripVertical className="h-4 w-4 text-muted-foreground" /> Question {local.order}
+          <GripVertical className="h-4 w-4 text-muted-foreground" /> Question {displayNumber}
           <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-normal text-muted-foreground">
             {QUESTION_TYPE_LABELS[local.type]}
           </span>
