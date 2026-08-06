@@ -64,9 +64,21 @@ export async function updateCategory(
   });
 }
 
-export async function deleteCategory(categoryId: string) {
+/** Deletes the category and its exam sets (cascade). Applicant results (exam_attempts) are
+ *  preserved — their category/exam link is cleared, but the row and its category/exam/position
+ *  snapshot remain. */
+export async function deleteCategory(categoryId: string, categoryName: string, userId: string, userName: string) {
   const { error } = await supabase.from("categories").delete().eq("id", categoryId);
   if (error) throw error;
+
+  await writeAuditLog({
+    userId,
+    userName,
+    action: "category_deleted",
+    entityType: "category",
+    entityId: categoryId,
+    description: `Deleted hiring category "${categoryName}" and its exam sets`,
+  });
 }
 
 export async function getCategory(categoryId: string): Promise<CategoryDocument | null> {

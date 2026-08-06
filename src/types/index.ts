@@ -176,8 +176,15 @@ export type AttemptStatus =
 export interface ExamAttemptDocument {
   id: string;
   applicantId: string;
-  categoryId: string;
-  examId: string;
+  /** Null once the source category has been deleted — categoryName below still holds its label. */
+  categoryId: string | null;
+  /** Null once the source exam set has been deleted — examTitle/positionTitle below still hold its labels. */
+  examId: string | null;
+  /** Category/exam/position labels captured when the attempt was created — the only source of
+   *  truth once the category or exam set has since been deleted. */
+  categoryName?: string;
+  examTitle?: string;
+  positionTitle?: string;
   attemptNumber: number;
   status: AttemptStatus;
   startedAt?: Timestamp;
@@ -204,6 +211,7 @@ export type AuditAction =
   | "staff_login"
   | "category_created"
   | "category_updated"
+  | "category_deleted"
   | "exam_created"
   | "exam_published"
   | "question_changed"

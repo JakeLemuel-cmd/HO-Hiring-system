@@ -55,15 +55,20 @@ Deno.serve(async (req) => {
     const { data: a } = await admin.from("exam_attempts").select("*").eq("id", attemptId).maybeSingle();
     if (!a) return errorResponse("Result not found.", 404);
 
+    // The category/exam a result belongs to may have since been deleted (only the link is
+    // cleared, not the result itself) — fall back to the snapshot label taken when the attempt
+    // was created, and skip questions/breakdown entirely once the exam is gone.
     const [{ data: applicant }, { data: category }, { data: exam }, { data: questions }] = await Promise.all([
       admin.from("applicants").select("*").eq("id", a.applicant_id).single(),
-      admin.from("categories").select("*").eq("id", a.category_id).single(),
-      admin.from("exams").select("*").eq("id", a.exam_id).single(),
-      admin
-        .from("exam_questions")
-        .select("id, order, question_type, points, correct_option_id, correct_answer_text")
-        .eq("exam_id", a.exam_id)
-        .order("order", { ascending: true }),
+      a.category_id ? admin.from("categories").select("*").eq("id", a.category_id).maybeSingle() : { data: null },
+      a.exam_id ? admin.from("exams").select("*").eq("id", a.exam_id).maybeSingle() : { data: null },
+      a.exam_id
+        ? admin
+            .from("exam_questions")
+            .select("id, order, question_type, points, correct_option_id, correct_answer_text")
+            .eq("exam_id", a.exam_id)
+            .order("order", { ascending: true })
+        : { data: [] },
     ]);
 
     const parts = computePartBreakdown(questions ?? [], a.answers ?? {}, a.essay_scores ?? {});
@@ -95,13 +100,13 @@ Deno.serve(async (req) => {
         applicantReferenceNumber: applicant.applicant_reference_number ?? undefined,
       },
       category: {
-        id: category.id,
-        name: category.name,
+        id: category?.id ?? null,
+        name: category?.name ?? a.category_name ?? "",
       },
       exam: {
-        id: exam.id,
-        title: exam.title,
-        positionTitle: exam.position_title,
+        id: exam?.id ?? null,
+        title: exam?.title ?? a.exam_title ?? "",
+        positionTitle: exam?.position_title ?? a.position_title ?? "",
       },
     });
   } catch (err) {

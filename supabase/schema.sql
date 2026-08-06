@@ -145,8 +145,13 @@ create index if not exists applicants_normalized_full_name_idx on applicants (no
 create table if not exists exam_attempts (
   id uuid primary key default gen_random_uuid(),
   applicant_id uuid not null references applicants (id) on delete cascade,
-  category_id uuid not null references categories (id) on delete cascade,
-  exam_id uuid not null references exams (id) on delete cascade,
+  -- Deleting a category/exam set must not delete applicant results — only the link is cleared,
+  -- and category_name/exam_title/position_title below preserve the original labels.
+  category_id uuid references categories (id) on delete set null,
+  exam_id uuid references exams (id) on delete set null,
+  category_name text,
+  exam_title text,
+  position_title text,
   attempt_number int not null default 1,
   status text not null default 'not_started'
     check (status in ('not_started', 'in_progress', 'completed', 'expired', 'disqualified')),

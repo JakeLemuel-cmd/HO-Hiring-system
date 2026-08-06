@@ -15,6 +15,8 @@ Deno.serve(async (req) => {
     const { data: exam } = await admin.from("exams").select("*").eq("public_code", publicCode).maybeSingle();
     if (!exam) return errorResponse("This examination link is invalid or no longer available.", 404);
 
+    const { data: category } = await admin.from("categories").select("name").eq("id", exam.category_id).maybeSingle();
+
     const now = Date.now();
     if (exam.availability_status !== "open") {
       return errorResponse("This examination is not currently open.", 409);
@@ -82,6 +84,9 @@ Deno.serve(async (req) => {
         applicant_id: applicantId,
         category_id: exam.category_id,
         exam_id: exam.id,
+        category_name: category?.name ?? "",
+        exam_title: exam.title,
+        position_title: exam.position_title,
         attempt_number: (existingAttempts?.length ?? 0) + 1,
         status: "in_progress",
         started_at: startedAt,

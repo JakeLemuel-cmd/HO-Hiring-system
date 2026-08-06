@@ -53,8 +53,10 @@ export function ApplicantProfilePage() {
           .filter((a) => a.status === "completed")
           .map(async (attempt) => {
             const [category, { data: examRow }] = await Promise.all([
-              getCategory(attempt.categoryId),
-              supabase.from("exams").select("title, position_title").eq("id", attempt.examId).maybeSingle(),
+              attempt.categoryId ? getCategory(attempt.categoryId) : null,
+              attempt.examId
+                ? supabase.from("exams").select("title, position_title").eq("id", attempt.examId).maybeSingle()
+                : { data: null },
             ]);
             return {
               attempt,
@@ -71,11 +73,13 @@ export function ApplicantProfilePage() {
 
   async function downloadIndividual(row: EnrichedAttempt) {
     const { attempt, category, exam } = row;
-    const { data: questions } = await supabase
-      .from("exam_questions")
-      .select("id, order, question_type, points, correct_option_id, correct_answer_text")
-      .eq("exam_id", attempt.examId)
-      .order("order", { ascending: true });
+    const { data: questions } = attempt.examId
+      ? await supabase
+          .from("exam_questions")
+          .select("id, order, question_type, points, correct_option_id, correct_answer_text")
+          .eq("exam_id", attempt.examId)
+          .order("order", { ascending: true })
+      : { data: [] };
     const parts = computePartBreakdown(
       (questions ?? []).map((q) => ({
         id: q.id,
@@ -97,9 +101,9 @@ export function ApplicantProfilePage() {
       contactNumber: applicant!.mobileNumber,
       email: applicant!.email,
       applicantReferenceNumber: applicant!.applicantReferenceNumber,
-      categoryName: category?.name ?? "",
-      positionTitle: exam?.positionTitle ?? "",
-      examTitle: exam?.title ?? category?.name ?? "",
+      categoryName: category?.name ?? attempt.categoryName ?? "",
+      positionTitle: exam?.positionTitle ?? attempt.positionTitle ?? "",
+      examTitle: exam?.title ?? attempt.examTitle ?? category?.name ?? "",
       examDate: attempt.submittedAt ? new Date(attempt.submittedAt).toLocaleDateString() : "",
       examDurationSeconds,
       rawScore: attempt.earnedPoints ?? 0,
@@ -120,8 +124,8 @@ export function ApplicantProfilePage() {
       email: applicant!.email,
       applicantReferenceNumber: applicant!.applicantReferenceNumber,
       attempts: attempts.map(({ attempt, category, exam }) => ({
-        categoryName: category?.name ?? "",
-        positionTitle: exam?.positionTitle ?? "",
+        categoryName: category?.name ?? attempt.categoryName ?? "",
+        positionTitle: exam?.positionTitle ?? attempt.positionTitle ?? "",
         percentage: attempt.percentage ?? 0,
         result: attempt.result ?? "failed",
         examDate: attempt.submittedAt ? new Date(attempt.submittedAt).toLocaleDateString() : "",
@@ -149,7 +153,7 @@ export function ApplicantProfilePage() {
             <CardContent className="flex items-center justify-between p-4">
               <div>
                 <p className="font-medium text-foreground">
-                  {i + 1}. {row.category?.name} — {row.exam?.positionTitle}
+                  {i + 1}. {row.category?.name ?? row.attempt.categoryName} — {row.exam?.positionTitle ?? row.attempt.positionTitle}
                 </p>
                 <p className="mt-0.5 flex items-center gap-1.5 text-sm text-muted-foreground">
                   {row.attempt.needsReview ? (

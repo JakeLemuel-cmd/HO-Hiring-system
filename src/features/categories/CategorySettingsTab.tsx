@@ -35,8 +35,9 @@ export function CategorySettingsTab({ category }: { category: CategoryDocument }
   }
 
   async function remove() {
-    await deleteCategory(category.id);
-    toast.success("Category deleted");
+    if (!profile) return;
+    await deleteCategory(category.id, category.name, profile.uid, `${profile.firstName} ${profile.lastName}`);
+    toast.success("Category deleted", { description: "Its exam sets were removed; applicant results were kept." });
     navigate("/admin/categories");
   }
 
@@ -77,7 +78,7 @@ export function CategorySettingsTab({ category }: { category: CategoryDocument }
       <ConfirmDialog
         open={deleteOpen}
         title="Delete this category?"
-        description="This will remove the category. Exam and applicant records are not automatically deleted."
+        description="This permanently deletes the category and all of its exam sets. Applicant records and their exam results are kept."
         confirmLabel="Delete"
         danger
         onCancel={() => setDeleteOpen(false)}

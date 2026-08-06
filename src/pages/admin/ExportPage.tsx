@@ -20,6 +20,9 @@ function mapAttempt(row: any): ExamAttemptDocument {
     applicantId: row.applicant_id,
     categoryId: row.category_id,
     examId: row.exam_id,
+    categoryName: row.category_name ?? undefined,
+    examTitle: row.exam_title ?? undefined,
+    positionTitle: row.position_title ?? undefined,
     attemptNumber: row.attempt_number,
     status: row.status,
     earnedPoints: row.earned_points ?? undefined,
@@ -93,7 +96,7 @@ export function ExportPage() {
 
       // A category may have multiple exam sets — fetch each distinct exam's own details
       // (title/position) and questions once, and reuse them per attempt.
-      const examIds = Array.from(new Set(attempts.map((a) => a.examId)));
+      const examIds = Array.from(new Set(attempts.map((a) => a.examId).filter((id): id is string => !!id)));
       const [{ data: examRows }, { data: allQuestions }] = await Promise.all([
         supabase.from("exams").select("id, title, position_title").in("id", examIds),
         supabase
@@ -119,7 +122,7 @@ export function ExportPage() {
         if (!applicant) continue;
 
         const parts = computePartBreakdown(
-          (questionsByExamId.get(attempt.examId) ?? []).map((q) => ({
+          (questionsByExamId.get(attempt.examId ?? "") ?? []).map((q) => ({
             id: q.id,
             type: q.question_type,
             points: q.points,
@@ -134,7 +137,7 @@ export function ExportPage() {
           attempt.startedAt && attempt.submittedAt
             ? Math.round((new Date(attempt.submittedAt).getTime() - new Date(attempt.startedAt).getTime()) / 1000)
             : null;
-        const examInfo = examsById.get(attempt.examId);
+        const examInfo = examsById.get(attempt.examId ?? "");
 
         const { blob, filename } = await generateResultPdf({
           applicantName: `${applicant.firstName} ${applicant.lastName}`,
@@ -142,8 +145,8 @@ export function ExportPage() {
           email: applicant.email,
           applicantReferenceNumber: applicant.applicantReferenceNumber,
           categoryName: category.name,
-          positionTitle: examInfo?.positionTitle ?? "",
-          examTitle: examInfo?.title ?? category.name,
+          positionTitle: examInfo?.positionTitle ?? attempt.positionTitle ?? "",
+          examTitle: examInfo?.title ?? attempt.examTitle ?? category.name,
           examDate: attempt.submittedAt ? new Date(attempt.submittedAt).toLocaleDateString() : "",
           examDurationSeconds,
           rawScore: attempt.earnedPoints ?? 0,
