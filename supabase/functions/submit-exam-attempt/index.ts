@@ -17,6 +17,7 @@ async function scoreAndFinalize(
       percentage: attempt.percentage,
       result: attempt.result,
       resultReferenceNumber: attempt.result_reference_number,
+      needsReview: attempt.needs_review ?? false,
     };
   }
 
@@ -29,10 +30,17 @@ async function scoreAndFinalize(
       .eq("exam_id", attempt.exam_id),
   ]);
 
+  // Essay questions aren't auto-gradable — their points still count toward the total,
+  // but are excluded from earnedPoints/result until staff manually score them.
   let earnedPoints = 0;
   let totalPoints = 0;
+  let hasEssay = false;
   for (const q of questions ?? []) {
     totalPoints += q.points ?? 0;
+    if (q.question_type === "essay") {
+      hasEssay = true;
+      continue;
+    }
     const given = answers[q.id];
     const isCorrect =
       q.question_type === "fill_blank"
@@ -41,9 +49,9 @@ async function scoreAndFinalize(
     if (isCorrect) earnedPoints += q.points ?? 0;
   }
 
-  const percentage = totalPoints > 0 ? Math.round((earnedPoints / totalPoints) * 100) : 0;
   const passingScore = category?.passing_score ?? exam?.passing_score ?? 70;
-  const result = percentage >= passingScore ? "passed" : "failed";
+  const percentage = hasEssay ? null : totalPoints > 0 ? Math.round((earnedPoints / totalPoints) * 100) : 0;
+  const result = hasEssay ? null : percentage! >= passingScore ? "passed" : "failed";
   const resultReferenceNumber = randomReferenceNumber();
 
   const { error } = await admin
@@ -58,6 +66,7 @@ async function scoreAndFinalize(
       result,
       result_reference_number: resultReferenceNumber,
       submission_reason: submissionReason,
+      needs_review: hasEssay,
     })
     .eq("id", attempt.id);
   if (error) throw error;
@@ -66,14 +75,14 @@ async function scoreAndFinalize(
     action: submissionReason === "time_expired" ? "attempt_auto_submitted" : "attempt_submitted",
     entity_type: "examAttempt",
     entity_id: attempt.id,
-    description: `Examination submitted (${submissionReason})`,
+    description: `Examination submitted (${submissionReason})${hasEssay ? " — pending manual review" : ""}`,
     category_id: attempt.category_id,
     exam_id: attempt.exam_id,
     applicant_id: attempt.applicant_id,
     attempt_id: attempt.id,
   });
 
-  return { attemptId: attempt.id, earnedPoints, totalPoints, percentage, result, resultReferenceNumber };
+  return { attemptId: attempt.id, earnedPoints, totalPoints, percentage, result, resultReferenceNumber, needsReview: hasEssay };
 }
 
 Deno.serve(async (req) => {

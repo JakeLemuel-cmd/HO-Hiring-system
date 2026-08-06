@@ -31,7 +31,7 @@ export function ExamResultPage() {
   }, [attemptId]);
 
   useEffect(() => {
-    if (!result || result.attempt.status !== "completed" || downloadedOnce.current) return;
+    if (!result || result.attempt.status !== "completed" || result.attempt.needsReview || downloadedOnce.current) return;
     downloadedOnce.current = true;
     triggerDownload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -55,6 +55,7 @@ export function ExamResultPage() {
       attemptNumber: attempt.attemptNumber,
       resultReferenceNumber: attempt.resultReferenceNumber ?? "",
       verificationUrl: `${PUBLIC_APP_URL}/exam/verify/${attempt.resultReferenceNumber}`,
+      parts: attempt.parts,
     });
     downloadBlob(blob, filename);
   }
@@ -70,6 +71,31 @@ export function ExamResultPage() {
   if (!result) return <LoadingSkeleton />;
   const { attempt, applicant, category } = result;
 
+  if (attempt.needsReview) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-muted/40 p-4">
+        <Card className="w-full max-w-md text-center">
+          <CardContent className="pt-6">
+            <PublicExamHeader />
+            <div className="mt-3 flex justify-center">
+              <StatusBadge status="pending_review" />
+            </div>
+            <p className="mt-4 text-sm text-foreground">
+              Your examination has been submitted and includes questions that require manual review.
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Your result will be available once staff finish grading. Please check back later.
+            </p>
+            <p className="mt-4 text-xs text-muted-foreground">Examinee No. {attempt.resultReferenceNumber}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Applicant: {applicant.firstName} {applicant.lastName}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-muted/40 p-4">
       <Card className="w-full max-w-md text-center">
@@ -80,6 +106,20 @@ export function ExamResultPage() {
           </h1>
           <p className="text-muted-foreground">{attempt.percentage}%</p>
           <div className="mt-3 flex justify-center">{attempt.result && <StatusBadge status={attempt.result} />}</div>
+
+          {attempt.parts && attempt.parts.length > 1 && (
+            <div className="mt-4 space-y-1 rounded-md border border-border bg-muted/40 p-3 text-left text-sm">
+              {attempt.parts.map((part) => (
+                <div key={part.label} className="flex justify-between">
+                  <span className="text-muted-foreground">{part.label}</span>
+                  <span className="font-medium text-foreground">
+                    {part.earned}/{part.total}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
           <p className="mt-4 text-xs text-muted-foreground">Examinee No. {attempt.resultReferenceNumber}</p>
           <p className="mt-1 text-xs text-muted-foreground">
             Applicant: {applicant.firstName} {applicant.lastName}

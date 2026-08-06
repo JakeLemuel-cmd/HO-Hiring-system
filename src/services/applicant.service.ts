@@ -21,6 +21,8 @@ function mapAttempt(row: any): ExamAttemptDocument {
     resultReferenceNumber: row.result_reference_number ?? undefined,
     submissionReason: row.submission_reason ?? undefined,
     answers: row.answers ?? undefined,
+    needsReview: row.needs_review ?? false,
+    essayScores: row.essay_scores ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -55,10 +57,22 @@ export async function submitExamAttempt(attemptId: string, answers: Record<strin
     attemptId: string;
     earnedPoints: number;
     totalPoints: number;
+    percentage: number | null;
+    result: "passed" | "failed" | null;
+    resultReferenceNumber: string;
+    needsReview: boolean;
+  }>("submit-exam-attempt", { attemptId, answers });
+}
+
+/** Staff-only: scores an attempt's essay questions (0..points each) and finalizes the result. */
+export async function gradeEssayAnswers(attemptId: string, scores: Record<string, number>) {
+  return invokeFunction<{
+    attemptId: string;
+    earnedPoints: number;
+    totalPoints: number;
     percentage: number;
     result: "passed" | "failed";
-    resultReferenceNumber: string;
-  }>("submit-exam-attempt", { attemptId, answers });
+  }>("grade-essay-answers", { attemptId, scores });
 }
 
 
@@ -90,6 +104,8 @@ export function subscribeToAllAttemptResults(callback: (rows: AttemptResultRow[]
         totalPoints: row.total_points ?? undefined,
         percentage: row.percentage ?? undefined,
         submittedAt: row.submitted_at ?? undefined,
+        needsReview: row.needs_review ?? false,
+        essayScores: row.essay_scores ?? undefined,
         answers: row.answers ?? {},
       }))
     );

@@ -21,6 +21,8 @@ function mapAttempt(row: any): ExamAttemptDocument {
     result: row.result ?? undefined,
     resultReferenceNumber: row.result_reference_number ?? undefined,
     submittedAt: row.submitted_at ?? undefined,
+    needsReview: row.needs_review ?? false,
+    essayScores: row.essay_scores ?? undefined,
     answers: row.answers ?? {},
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -113,7 +115,9 @@ export function ResultsTab({ categoryId, passingScore }: { categoryId: string; p
               <TableCell className="font-mono text-xs">{a.resultReferenceNumber}</TableCell>
               <TableCell>{a.earnedPoints} / {a.totalPoints}</TableCell>
               <TableCell>{a.percentage}%</TableCell>
-              <TableCell>{a.result && <StatusBadge status={a.result} />}</TableCell>
+              <TableCell>
+                {a.needsReview ? <StatusBadge status="pending_review" /> : a.result && <StatusBadge status={a.result} />}
+              </TableCell>
               <TableCell>{a.submittedAt ? new Date(a.submittedAt).toLocaleString() : "—"}</TableCell>
               <TableCell className="text-right">
                 <Button variant="outline" size="sm" onClick={() => setReviewingAttempt(a)}>
@@ -129,8 +133,11 @@ export function ResultsTab({ categoryId, passingScore }: { categoryId: string; p
         open={reviewingAttempt !== null}
         onClose={() => setReviewingAttempt(null)}
         examId={reviewingAttempt?.examId ?? null}
+        attemptId={reviewingAttempt?.id}
         applicantName={reviewingAttempt ? applicantName(reviewingAttempt.applicantId) : ""}
         answers={reviewingAttempt?.answers ?? {}}
+        needsReview={reviewingAttempt?.needsReview}
+        essayScores={reviewingAttempt?.essayScores}
       />
     </div>
   );

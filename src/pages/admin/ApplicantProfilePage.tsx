@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { getApplicantHistory } from "@/services/applicant.service";
 import { getCategory } from "@/services/category.service";
 import { generateApplicantHistoryPdf, generateResultPdf, downloadBlob } from "@/lib/pdf";
+import { computePartBreakdown } from "@/lib/examParts";
 import type { ApplicantDocument, CategoryDocument, ExamAttemptDocument } from "@/types";
 
 interface EnrichedAttempt {
@@ -59,6 +60,23 @@ export function ApplicantProfilePage() {
 
   async function downloadIndividual(row: EnrichedAttempt) {
     const { attempt, category } = row;
+    const { data: questions } = await supabase
+      .from("exam_questions")
+      .select("id, order, question_type, points, correct_option_id, correct_answer_text")
+      .eq("exam_id", attempt.examId)
+      .order("order", { ascending: true });
+    const parts = computePartBreakdown(
+      (questions ?? []).map((q) => ({
+        id: q.id,
+        type: q.question_type,
+        points: q.points,
+        correctOptionId: q.correct_option_id,
+        correctAnswerText: q.correct_answer_text,
+      })),
+      attempt.answers ?? {},
+      attempt.essayScores
+    );
+
     const { blob, filename } = await generateResultPdf({
       applicantName: `${applicant!.firstName} ${applicant!.lastName}`,
       email: applicant!.email,
@@ -74,6 +92,7 @@ export function ApplicantProfilePage() {
       attemptNumber: attempt.attemptNumber,
       resultReferenceNumber: attempt.resultReferenceNumber ?? "",
       verificationUrl: `${PUBLIC_APP_URL}/exam/verify/${attempt.resultReferenceNumber}`,
+      parts,
     });
     downloadBlob(blob, filename);
   }

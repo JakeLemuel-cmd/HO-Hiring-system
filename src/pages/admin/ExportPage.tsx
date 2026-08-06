@@ -5,6 +5,7 @@ import { Download } from "lucide-react";
 import { supabase, PUBLIC_APP_URL } from "@/lib/supabase";
 import { listCategoriesOnce } from "@/services/category.service";
 import { generateResultPdf } from "@/lib/pdf";
+import { computePartBreakdown } from "@/lib/examParts";
 import { PageHeader } from "@/components/common/Misc";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Card, CardContent } from "@/components/ui/card";
@@ -27,6 +28,8 @@ function mapAttempt(row: any): ExamAttemptDocument {
     result: row.result ?? undefined,
     resultReferenceNumber: row.result_reference_number ?? undefined,
     submittedAt: row.submitted_at ?? undefined,
+    needsReview: row.needs_review ?? false,
+    essayScores: row.essay_scores ?? undefined,
     answers: row.answers ?? {},
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -71,10 +74,14 @@ export function ExportPage() {
         .select("*")
         .eq("category_id", category.id)
         .eq("status", "completed");
-      const attempts = (attemptRows ?? []).map(mapAttempt);
+      // Attempts awaiting manual essay grading have no final result yet — exclude them so the
+      // export doesn't mislabel a pending result as "Failed".
+      const attempts = (attemptRows ?? []).map(mapAttempt).filter((a) => !a.needsReview);
 
       if (attempts.length === 0) {
-        toast.error("No completed results found for this category.");
+        toast.error("No finalized results found for this category.", {
+          description: "Attempts awaiting essay grading are excluded from export.",
+        });
         return;
       }
 
@@ -83,12 +90,39 @@ export function ExportPage() {
       const applicantsById = new Map<string, ApplicantDocument>();
       (applicantRows ?? []).forEach((row) => applicantsById.set(row.id, mapApplicant(row)));
 
+      // A category may have multiple exam sets — fetch each distinct exam's questions once
+      // and reuse the breakdown logic per attempt.
+      const examIds = Array.from(new Set(attempts.map((a) => a.examId)));
+      const { data: allQuestions } = await supabase
+        .from("exam_questions")
+        .select("id, exam_id, order, question_type, points, correct_option_id, correct_answer_text")
+        .in("exam_id", examIds)
+        .order("order", { ascending: true });
+      const questionsByExamId = new Map<string, typeof allQuestions>();
+      (allQuestions ?? []).forEach((q) => {
+        const list = questionsByExamId.get(q.exam_id) ?? [];
+        list.push(q);
+        questionsByExamId.set(q.exam_id, list);
+      });
+
       const zip = new JSZip();
       setProgress({ done: 0, total: attempts.length });
 
       for (const attempt of attempts) {
         const applicant = applicantsById.get(attempt.applicantId);
         if (!applicant) continue;
+
+        const parts = computePartBreakdown(
+          (questionsByExamId.get(attempt.examId) ?? []).map((q) => ({
+            id: q.id,
+            type: q.question_type,
+            points: q.points,
+            correctOptionId: q.correct_option_id,
+            correctAnswerText: q.correct_answer_text,
+          })),
+          attempt.answers ?? {},
+          attempt.essayScores
+        );
 
         const { blob, filename } = await generateResultPdf({
           applicantName: `${applicant.firstName} ${applicant.lastName}`,
@@ -105,6 +139,7 @@ export function ExportPage() {
           attemptNumber: attempt.attemptNumber,
           resultReferenceNumber: attempt.resultReferenceNumber ?? "",
           verificationUrl: `${PUBLIC_APP_URL}/exam/verify/${attempt.resultReferenceNumber}`,
+          parts,
         });
         zip.file(filename, blob);
         setProgress((prev) => ({ done: (prev?.done ?? 0) + 1, total: attempts.length }));

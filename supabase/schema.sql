@@ -68,7 +68,7 @@ create table if not exists categories (
 );
 
 -- ---------------------------------------------------------------------------
--- exams (one primary exam per category in this MVP)
+-- exams (a category may have multiple exams/"sets")
 -- ---------------------------------------------------------------------------
 create table if not exists exams (
   id uuid primary key default gen_random_uuid(),
@@ -100,7 +100,6 @@ create table if not exists exams (
   updated_at timestamptz not null default now()
 );
 
-create unique index if not exists exams_one_per_category on exams (category_id);
 
 -- ---------------------------------------------------------------------------
 -- exam_questions
@@ -113,7 +112,7 @@ create table if not exists exam_questions (
   options jsonb not null default '[]'::jsonb,
   correct_option_id text not null default '',
   question_type text not null default 'multiple_choice'
-    check (question_type in ('multiple_choice', 'true_false', 'fill_blank')),
+    check (question_type in ('multiple_choice', 'true_false', 'fill_blank', 'essay')),
   correct_answer_text text not null default '',
   points int not null default 1,
   explanation text,
@@ -164,6 +163,8 @@ create table if not exists exam_attempts (
   result_reference_number text,
   submission_reason text check (submission_reason in ('applicant_submitted', 'time_expired', 'exam_closed_by_staff')),
   answers jsonb not null default '{}'::jsonb,
+  needs_review boolean not null default false,
+  essay_scores jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

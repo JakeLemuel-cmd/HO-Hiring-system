@@ -4,13 +4,14 @@ import QRCode from "qrcode";
 import { toast } from "sonner";
 import type { CategoryDocument, ExamDocument, ExamQuestion, QuestionType } from "@/types";
 import { examBuilderSetupSchema } from "@/lib/validation";
+import { QUESTION_TYPE_LABELS, QUESTION_TYPE_DIRECTIONS, groupIntoParts } from "@/lib/examParts";
 import {
-  ensureExamDraft,
   subscribeToExam,
   subscribeToQuestions,
   saveQuestion,
   deleteQuestion,
   updateExamTitle,
+  updateExamTimeLimit,
   regenerateQuestions,
   appendQuestions,
   publishExam,
@@ -31,12 +32,6 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
-const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
-  multiple_choice: "Multiple Choice",
-  true_false: "True or False",
-  fill_blank: "Fill in the Blank",
-};
-
 function newQuestion(order: number, type: QuestionType): ExamQuestion {
   if (type === "true_false") {
     return {
@@ -54,7 +49,7 @@ function newQuestion(order: number, type: QuestionType): ExamQuestion {
       isRequired: true,
     };
   }
-  if (type === "fill_blank") {
+  if (type === "fill_blank" || type === "essay") {
     return {
       id: crypto.randomUUID(),
       order,
@@ -63,7 +58,7 @@ function newQuestion(order: number, type: QuestionType): ExamQuestion {
       options: [],
       correctOptionId: "",
       correctAnswerText: "",
-      points: 1,
+      points: type === "essay" ? 5 : 1,
       isRequired: true,
     };
   }
@@ -81,9 +76,16 @@ function newQuestion(order: number, type: QuestionType): ExamQuestion {
   };
 }
 
-export function ExamBuilderTab({ category }: { category: CategoryDocument }) {
+export function ExamBuilderTab({
+  category,
+  examId,
+  onBack,
+}: {
+  category: CategoryDocument;
+  examId: string;
+  onBack?: () => void;
+}) {
   const { profile } = useAuth();
-  const [examId, setExamId] = useState<string | null>(null);
   const [exam, setExam] = useState<ExamDocument | null>(null);
   const [questions, setQuestions] = useState<ExamQuestion[]>([]);
   const [publishError, setPublishError] = useState<string | null>(null);
@@ -92,6 +94,8 @@ export function ExamBuilderTab({ category }: { category: CategoryDocument }) {
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
 
   const [builderTitle, setBuilderTitle] = useState("");
+  const [builderHasTimeLimit, setBuilderHasTimeLimit] = useState(true);
+  const [builderDuration, setBuilderDuration] = useState("30");
   const [builderType, setBuilderType] = useState<QuestionType>("multiple_choice");
   const [builderCount, setBuilderCount] = useState("10");
   const [builderError, setBuilderError] = useState<string | null>(null);
@@ -108,11 +112,6 @@ export function ExamBuilderTab({ category }: { category: CategoryDocument }) {
   const [resetting, setResetting] = useState(false);
 
   const [editMode, setEditMode] = useState(false);
-
-  useEffect(() => {
-    if (!profile) return;
-    ensureExamDraft(category.id, category.name, profile.uid).then(setExamId);
-  }, [category.id, category.name, profile]);
 
   useEffect(() => {
     if (!examId) return;
@@ -135,8 +134,23 @@ export function ExamBuilderTab({ category }: { category: CategoryDocument }) {
   }, [displayUrl]);
 
   useEffect(() => {
-    if (exam) setBuilderTitle(exam.title);
+    if (exam) {
+      setBuilderTitle(exam.title);
+      setBuilderHasTimeLimit(exam.hasTimeLimit);
+      setBuilderDuration(String(exam.durationMinutes ?? 30));
+    }
   }, [exam?.id]);
+
+  function commitTimeLimit(hasTimeLimit: boolean, durationMinutes: string) {
+    const minutes = Math.max(1, Number(durationMinutes) || 30);
+    setBuilderHasTimeLimit(hasTimeLimit);
+    setBuilderDuration(String(minutes));
+    if (!exam) return;
+    if (hasTimeLimit === exam.hasTimeLimit && (!hasTimeLimit || minutes === exam.durationMinutes)) return;
+    updateExamTimeLimit(examId, hasTimeLimit, hasTimeLimit ? minutes : null).catch(() => {
+      toast.error("Failed to update time limit.");
+    });
+  }
 
   useEffect(() => {
     if (lastBatch || questions.length === 0) return;
@@ -256,6 +270,7 @@ export function ExamBuilderTab({ category }: { category: CategoryDocument }) {
         setPublishError(`Question ${q.order} is missing question text.`);
         return;
       }
+      if (q.type === "essay") continue;
       if (q.type === "fill_blank") {
         if (!q.correctAnswerText.trim()) {
           setPublishError(`Question ${q.order} needs a correct answer entered.`);
@@ -307,6 +322,11 @@ export function ExamBuilderTab({ category }: { category: CategoryDocument }) {
 
   return (
     <div className="space-y-6">
+      {onBack && (
+        <Button variant="ghost" size="sm" className="-ml-2" onClick={onBack}>
+          ← Back to Exam Sets
+        </Button>
+      )}
       {displayUrl && (
         <Card>
           <CardContent className="pt-6">
@@ -414,6 +434,37 @@ export function ExamBuilderTab({ category }: { category: CategoryDocument }) {
               />
             </div>
 
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Time Limit</Label>
+                <Select
+                  value={builderHasTimeLimit ? "limited" : "unlimited"}
+                  onValueChange={(v) => commitTimeLimit(v === "limited", builderDuration)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="limited">Time Limited</SelectItem>
+                    <SelectItem value="unlimited">No Limit</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {builderHasTimeLimit && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="examDuration">Duration (minutes)</Label>
+                  <Input
+                    id="examDuration"
+                    type="number"
+                    min={1}
+                    value={builderDuration}
+                    onChange={(e) => setBuilderDuration(e.target.value)}
+                    onBlur={(e) => commitTimeLimit(builderHasTimeLimit, e.target.value)}
+                  />
+                </div>
+              )}
+            </div>
+
             {!hasQuestions ? (
               <>
                 <p className="text-sm text-muted-foreground">
@@ -431,6 +482,7 @@ export function ExamBuilderTab({ category }: { category: CategoryDocument }) {
                         <SelectItem value="multiple_choice">Multiple Choice</SelectItem>
                         <SelectItem value="true_false">True or False</SelectItem>
                         <SelectItem value="fill_blank">Fill in the Blank</SelectItem>
+                        <SelectItem value="essay">Essay</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -476,15 +528,25 @@ export function ExamBuilderTab({ category }: { category: CategoryDocument }) {
               </Alert>
             )}
 
-            <div className="space-y-4">
-              {questions.map((q) => (
-                <QuestionEditor
-                  key={q.id}
-                  question={q}
-                  disabled={!canEditFields}
-                  onChange={updateQuestion}
-                  onDelete={() => removeQuestion(q.id)}
-                />
+            <div className="space-y-6">
+              {groupIntoParts(questions).map((part, i) => (
+                <div key={part[0].id} className="space-y-4">
+                  <div className="rounded-md border border-border bg-muted/40 p-3">
+                    <p className="text-sm font-semibold text-foreground">
+                      Part {i + 1}: {QUESTION_TYPE_LABELS[part[0].type]}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">{QUESTION_TYPE_DIRECTIONS[part[0].type]}</p>
+                  </div>
+                  {part.map((q) => (
+                    <QuestionEditor
+                      key={q.id}
+                      question={q}
+                      disabled={!canEditFields}
+                      onChange={updateQuestion}
+                      onDelete={() => removeQuestion(q.id)}
+                    />
+                  ))}
+                </div>
               ))}
             </div>
 
@@ -546,6 +608,7 @@ export function ExamBuilderTab({ category }: { category: CategoryDocument }) {
                   <SelectItem value="multiple_choice">Multiple Choice</SelectItem>
                   <SelectItem value="true_false">True or False</SelectItem>
                   <SelectItem value="fill_blank">Fill in the Blank</SelectItem>
+                  <SelectItem value="essay">Essay</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -651,7 +714,13 @@ function QuestionEditor({
         rows={2}
       />
 
-      {local.type === "fill_blank" ? (
+      {local.type === "essay" ? (
+        <p className="mt-3 text-xs text-muted-foreground">
+          This question is graded manually — the applicant responds in a free-text box, and staff review the
+          response and assign a score from 0 to {local.points} point{local.points === 1 ? "" : "s"} after the exam
+          is submitted.
+        </p>
+      ) : local.type === "fill_blank" ? (
         <div className="mt-3 space-y-1.5">
           <Label htmlFor={`answer-${local.id}`} className="text-xs text-muted-foreground">
             Correct Answer

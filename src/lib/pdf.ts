@@ -56,6 +56,8 @@ export interface ResultPdfData {
   attemptNumber: number;
   resultReferenceNumber: string;
   verificationUrl: string;
+  /** Per-part score breakdown (e.g. "Part 1: Multiple Choice" — 5/10), shown above the overall score. */
+  parts?: { label: string; earned: number; total: number }[];
 }
 
 export async function generateResultPdf(data: ResultPdfData): Promise<{ blob: Blob; filename: string }> {
@@ -100,6 +102,21 @@ export async function generateResultPdf(data: ResultPdfData): Promise<{ blob: Bl
   row("Position", data.positionTitle);
   row("Examination", data.examTitle);
   row("Examination Date", data.examDate);
+
+  if (data.parts && data.parts.length > 1) {
+    docPdf.setFont("helvetica", "bold");
+    docPdf.text("Score Breakdown:", 40, y);
+    y += 18;
+    docPdf.setFont("helvetica", "normal");
+    docPdf.setFontSize(9);
+    for (const part of data.parts) {
+      docPdf.text(`${part.label}: ${part.earned}/${part.total}`, 56, y);
+      y += 16;
+    }
+    docPdf.setFontSize(10);
+    y += 6;
+  }
+
   row("Raw Score", `${data.rawScore} out of ${data.totalPoints}`);
   row("Percentage", `${data.percentage}%`);
   row("Result", data.result === "passed" ? "Passed" : "Failed");

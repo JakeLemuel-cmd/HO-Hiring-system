@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, XCircle } from "lucide-react";
+import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import type { ExamQuestion } from "@/types";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-
-const QUESTION_TYPE_LABELS: Record<ExamQuestion["type"], string> = {
-  multiple_choice: "Multiple Choice",
-  true_false: "True or False",
-  fill_blank: "Fill in the Blank",
-};
+import { gradeEssayAnswers } from "@/services/applicant.service";
+import { QUESTION_TYPE_LABELS } from "@/lib/examParts";
+import { StatusBadge } from "@/components/common/StatusBadge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 function mapQuestion(row: any): ExamQuestion {
   return {
@@ -34,17 +35,25 @@ export function ResultReviewDialog({
   open,
   onClose,
   examId,
+  attemptId,
   applicantName,
   answers,
+  needsReview,
+  essayScores,
 }: {
   open: boolean;
   onClose: () => void;
   examId: string | null;
+  attemptId?: string | null;
   applicantName: string;
   answers: Record<string, string>;
+  needsReview?: boolean;
+  essayScores?: Record<string, number>;
 }) {
   const [questions, setQuestions] = useState<ExamQuestion[]>([]);
   const [loading, setLoading] = useState(false);
+  const [scores, setScores] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!open || !examId) return;
@@ -55,16 +64,54 @@ export function ResultReviewDialog({
       .eq("exam_id", examId)
       .order("order", { ascending: true })
       .then(({ data }) => {
-        setQuestions((data ?? []).map(mapQuestion));
+        const mapped = (data ?? []).map(mapQuestion);
+        setQuestions(mapped);
+        const initialScores: Record<string, string> = {};
+        mapped
+          .filter((q) => q.type === "essay")
+          .forEach((q) => {
+            initialScores[q.id] = String(essayScores?.[q.id] ?? "");
+          });
+        setScores(initialScores);
         setLoading(false);
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, examId]);
+
+  const essayQuestions = questions.filter((q) => q.type === "essay");
+
+  async function handleSaveScores() {
+    if (!attemptId) return;
+    const payload: Record<string, number> = {};
+    for (const q of essayQuestions) {
+      const raw = scores[q.id];
+      const value = Number(raw);
+      if (raw === undefined || raw === "" || Number.isNaN(value) || value < 0 || value > q.points) {
+        toast.error(`Enter a score between 0 and ${q.points} for question ${q.order}.`);
+        return;
+      }
+      payload[q.id] = value;
+    }
+    setSaving(true);
+    try {
+      await gradeEssayAnswers(attemptId, payload);
+      toast.success("Essay scores saved", { description: "The applicant's result has been finalized." });
+      onClose();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save scores.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Result Review — {applicantName}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            Result Review — {applicantName}
+            {needsReview && <StatusBadge status="pending_review" />}
+          </DialogTitle>
         </DialogHeader>
 
         {loading && <p className="text-sm text-muted-foreground">Loading questions...</p>}
@@ -86,7 +133,27 @@ export function ResultReviewDialog({
                 </div>
                 <p className="mb-3 text-sm text-foreground">{q.questionText}</p>
 
-                {q.type === "fill_blank" ? (
+                {q.type === "essay" ? (
+                  <div className="space-y-2">
+                    <p className="whitespace-pre-wrap rounded-md border border-border bg-muted/40 p-2 text-sm text-foreground">
+                      {given || "(no response)"}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor={`score-${q.id}`} className="text-xs text-muted-foreground">
+                        Score (0–{q.points})
+                      </Label>
+                      <Input
+                        id={`score-${q.id}`}
+                        type="number"
+                        min={0}
+                        max={q.points}
+                        className="h-8 w-20"
+                        value={scores[q.id] ?? ""}
+                        onChange={(e) => setScores((prev) => ({ ...prev, [q.id]: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                ) : q.type === "fill_blank" ? (
                   <div className="space-y-1.5 text-sm">
                     <div
                       className={cn(
@@ -166,6 +233,14 @@ export function ResultReviewDialog({
             <p className="text-sm text-muted-foreground">No questions found for this examination.</p>
           )}
         </div>
+
+        {essayQuestions.length > 0 && attemptId && (
+          <DialogFooter>
+            <Button onClick={handleSaveScores} disabled={saving}>
+              {saving ? "Saving..." : needsReview ? "Save Scores & Finalize Result" : "Update Essay Scores"}
+            </Button>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );

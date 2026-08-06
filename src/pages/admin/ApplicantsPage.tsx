@@ -40,7 +40,14 @@ export function ApplicantsPage() {
       {
         id: "status",
         header: "Status",
-        cell: ({ row }) => (row.original.result ? <StatusBadge status={row.original.result} /> : "—"),
+        cell: ({ row }) =>
+          row.original.needsReview ? (
+            <StatusBadge status="pending_review" />
+          ) : row.original.result ? (
+            <StatusBadge status={row.original.result} />
+          ) : (
+            "—"
+          ),
       },
       {
         id: "score",
@@ -94,8 +101,11 @@ export function ApplicantsPage() {
         open={reviewing !== null}
         onClose={() => setReviewing(null)}
         examId={reviewing?.examId ?? null}
+        attemptId={reviewing?.attemptId}
         applicantName={reviewing?.applicantName ?? ""}
         answers={reviewing?.answers ?? {}}
+        needsReview={reviewing?.needsReview}
+        essayScores={reviewing?.essayScores}
       />
     </div>
   );

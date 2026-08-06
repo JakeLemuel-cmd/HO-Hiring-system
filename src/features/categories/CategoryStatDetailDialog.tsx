@@ -29,6 +29,8 @@ function mapAttempt(row: any): ExamAttemptDocument {
     result: row.result ?? undefined,
     resultReferenceNumber: row.result_reference_number ?? undefined,
     submittedAt: row.submitted_at ?? undefined,
+    needsReview: row.needs_review ?? false,
+    essayScores: row.essay_scores ?? undefined,
     answers: row.answers ?? {},
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -110,7 +112,13 @@ export function CategoryStatDetailDialog({
                     <TableCell>
                       {r.attempt.earnedPoints}/{r.attempt.totalPoints} ({r.attempt.percentage}%)
                     </TableCell>
-                    <TableCell>{r.attempt.result && <StatusBadge status={r.attempt.result} />}</TableCell>
+                    <TableCell>
+                      {r.attempt.needsReview ? (
+                        <StatusBadge status="pending_review" />
+                      ) : (
+                        r.attempt.result && <StatusBadge status={r.attempt.result} />
+                      )}
+                    </TableCell>
                     <TableCell>{r.attempt.submittedAt ? new Date(r.attempt.submittedAt).toLocaleDateString() : "—"}</TableCell>
                     <TableCell className="text-right">
                       <Button variant="outline" size="sm" onClick={() => setReviewing(r)}>
@@ -129,8 +137,11 @@ export function CategoryStatDetailDialog({
         open={reviewing !== null}
         onClose={() => setReviewing(null)}
         examId={reviewing?.attempt.examId ?? null}
+        attemptId={reviewing?.attempt.id}
         applicantName={reviewing?.applicantName ?? ""}
         answers={reviewing?.attempt.answers ?? {}}
+        needsReview={reviewing?.attempt.needsReview}
+        essayScores={reviewing?.attempt.essayScores}
       />
     </>
   );

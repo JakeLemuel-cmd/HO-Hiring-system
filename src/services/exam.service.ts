@@ -118,22 +118,46 @@ export function subscribeToExam(examId: string, callback: (exam: ExamDocument | 
 }
 
 export function subscribeToQuestions(examId: string, callback: (questions: ExamQuestion[]) => void) {
+  let current: ExamQuestion[] = [];
+
+  function emit() {
+    callback([...current].sort((a, b) => a.order - b.order));
+  }
+
   async function load() {
     const { data } = await supabase
       .from("exam_questions")
       .select("*")
       .eq("exam_id", examId)
       .order("order", { ascending: true });
-    callback((data ?? []).map(mapQuestion));
+    current = (data ?? []).map(mapQuestion);
+    emit();
   }
   load();
 
+  // Merge each change directly from its realtime payload rather than re-querying the whole
+  // table: a payload only fires after that row's write has committed, so it's always fresh for
+  // that row. A full re-SELECT on every event would risk racing an in-flight save on a
+  // *different* question (still mid-debounce or mid-write) and overwriting it with stale data —
+  // which is exactly what made "Question N is missing question text" fire on publish even after
+  // the text had been typed in.
   const channel = supabase
     .channel(`exam-questions-${examId}`)
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "exam_questions", filter: `exam_id=eq.${examId}` },
-      load
+      (payload) => {
+        if (payload.eventType === "DELETE") {
+          const deletedId = (payload.old as { id?: string }).id;
+          current = current.filter((q) => q.id !== deletedId);
+        } else {
+          const updated = mapQuestion(payload.new);
+          const idx = current.findIndex((q) => q.id === updated.id);
+          if (idx >= 0) current = current.map((q, i) => (i === idx ? updated : q));
+          else current = [...current, updated];
+        }
+        emit();
+      }
     )
     .subscribe();
 
@@ -165,6 +189,14 @@ export async function saveQuestion(examId: string, question: ExamQuestion) {
 
 export async function updateExamTitle(examId: string, title: string) {
   const { error } = await supabase.from("exams").update({ title }).eq("id", examId);
+  if (error) throw error;
+}
+
+export async function updateExamTimeLimit(examId: string, hasTimeLimit: boolean, durationMinutes: number | null) {
+  const { error } = await supabase
+    .from("exams")
+    .update({ has_time_limit: hasTimeLimit, duration_minutes: hasTimeLimit ? durationMinutes : null })
+    .eq("id", examId);
   if (error) throw error;
 }
 
@@ -204,28 +236,49 @@ export async function appendQuestions(examId: string, questions: ExamQuestion[])
   return (data ?? []).map(mapQuestion);
 }
 
-/** Gets the category's single exam row, creating a draft if one doesn't exist yet. */
-export async function ensureExamDraft(categoryId: string, categoryName: string, userId: string): Promise<string> {
-  const { data: existing } = await supabase
-    .from("exams")
-    .select("id")
-    .eq("category_id", categoryId)
-    .maybeSingle();
-  if (existing) return existing.id as string;
+/** All exam sets belonging to a category, oldest first (Set 1, Set 2, ...). */
+export function subscribeToExamSets(categoryId: string, callback: (exams: ExamDocument[]) => void) {
+  async function load() {
+    const { data } = await supabase
+      .from("exams")
+      .select("*")
+      .eq("category_id", categoryId)
+      .order("created_at", { ascending: true });
+    callback((data ?? []).map(mapExam));
+  }
+  load();
 
+  const channel = supabase
+    .channel(`exam-sets-${categoryId}`)
+    .on("postgres_changes", { event: "*", schema: "public", table: "exams", filter: `category_id=eq.${categoryId}` }, load)
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+/** Creates a new draft exam set for the category — a category may hold multiple sets.
+ *  Passing score, duration, and max attempts are seeded from the category's own settings. */
+export async function createExamSet(
+  categoryId: string,
+  title: string,
+  userId: string,
+  defaults?: { passingScore?: number; durationMinutes?: number; maximumAttempts?: number }
+): Promise<string> {
   const { data, error } = await supabase
     .from("exams")
     .insert({
       category_id: categoryId,
-      title: `${categoryName} Examination`,
+      title,
       instructions:
         "Read each question carefully and select the best answer. You may not go back once you submit.",
-      passing_score: 70,
+      passing_score: defaults?.passingScore ?? 70,
       availability_status: "draft",
       has_time_limit: true,
-      duration_minutes: 30,
+      duration_minutes: defaults?.durationMinutes ?? 30,
       timezone: "Asia/Manila",
-      maximum_attempts: 1,
+      maximum_attempts: defaults?.maximumAttempts ?? 1,
       close_exam_behavior: "allow_active_attempts_to_finish",
       created_by: userId,
     })
@@ -233,6 +286,12 @@ export async function ensureExamDraft(categoryId: string, categoryName: string, 
     .single();
   if (error) throw error;
   return data.id as string;
+}
+
+/** Permanently removes a draft exam set (and its questions, via cascade). Published sets should be closed, not deleted. */
+export async function deleteExamSet(examId: string) {
+  const { error } = await supabase.from("exams").delete().eq("id", examId);
+  if (error) throw error;
 }
 
 export async function publishExam(

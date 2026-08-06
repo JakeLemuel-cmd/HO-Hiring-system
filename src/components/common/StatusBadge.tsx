@@ -14,6 +14,7 @@ const VARIANTS: Record<string, BadgeProps["variant"]> = {
   in_progress: "warning",
   not_started: "muted",
   disqualified: "destructive",
+  pending_review: "warning",
 };
 
 export function StatusBadge({ status }: { status: string }) {

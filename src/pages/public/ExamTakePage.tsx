@@ -9,7 +9,9 @@ import { PublicExamHeader } from "@/components/common/PublicExamHeader";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { QUESTION_TYPE_LABELS, QUESTION_TYPE_DIRECTIONS, groupIntoParts } from "@/lib/examParts";
 
 function formatTime(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -17,21 +19,6 @@ function formatTime(seconds: number): string {
   const s = Math.floor(seconds % 60);
   const pad = (n: number) => String(n).padStart(2, "0");
   return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
-}
-
-/** Groups questions into pages by contiguous runs of the same type — each generated
- *  batch (e.g. 10 Multiple Choice, then 5 True or False) becomes its own page. */
-function groupIntoPages(questions: SanitizedExamQuestion[]): SanitizedExamQuestion[][] {
-  const pages: SanitizedExamQuestion[][] = [];
-  for (const q of questions) {
-    const lastPage = pages[pages.length - 1];
-    if (lastPage && lastPage[0].type === q.type) {
-      lastPage.push(q);
-    } else {
-      pages.push([q]);
-    }
-  }
-  return pages;
 }
 
 export function ExamTakePage() {
@@ -142,11 +129,12 @@ export function ExamTakePage() {
     navigate(`/exam/${publicCode}/result/${result.attemptId}`, { state: { autoSubmitted: isAutoSubmit }, replace: true });
   }
 
-  const pages = useMemo(() => groupIntoPages(questions), [questions]);
+  const pages = useMemo(() => groupIntoParts(questions), [questions]);
 
   if (!attempt || questions.length === 0) return <LoadingSkeleton />;
 
   const pageQuestions = pages[currentPage] ?? [];
+  const pageType = pageQuestions[0]?.type;
   const answeredCount = Object.keys(answers).length;
   const isLastPage = currentPage === pages.length - 1;
   const showWarning5 = remainingSeconds != null && remainingSeconds <= 300 && remainingSeconds > 60;
@@ -159,7 +147,10 @@ export function ExamTakePage() {
           <PublicExamHeader />
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p className="text-sm text-muted-foreground">Page {currentPage + 1} of {pages.length}</p>
+              <p className="text-sm text-muted-foreground">
+                Part {currentPage + 1} of {pages.length}
+                {pageType && `: ${QUESTION_TYPE_LABELS[pageType]}`}
+              </p>
               <p className="text-xs text-muted-foreground">{answeredCount} of {questions.length} answered</p>
             </div>
             {remainingSeconds != null && (
@@ -192,6 +183,12 @@ export function ExamTakePage() {
           </p>
         )}
 
+        {pageType && (
+          <p className="mb-3 rounded-md border border-border bg-muted/40 p-3 text-sm text-foreground">
+            {QUESTION_TYPE_DIRECTIONS[pageType]}
+          </p>
+        )}
+
         <div className="max-h-[65vh] space-y-4 overflow-y-auto pr-1">
           {pageQuestions.map((question) => {
             const overallIndex = questions.findIndex((q) => q.id === question.id) + 1;
@@ -199,7 +196,14 @@ export function ExamTakePage() {
               <div key={question.id} className="rounded-lg border border-border bg-card p-4 sm:p-6">
                 <p className="mb-1 text-xs font-medium text-muted-foreground">Question {overallIndex}</p>
                 <p className="mb-4 font-medium text-foreground">{question.questionText}</p>
-                {question.type === "fill_blank" ? (
+                {question.type === "essay" ? (
+                  <Textarea
+                    value={answers[question.id] ?? ""}
+                    onChange={(e) => selectAnswer(question.id, e.target.value)}
+                    placeholder="Type your response"
+                    rows={6}
+                  />
+                ) : question.type === "fill_blank" ? (
                   <Input
                     value={answers[question.id] ?? ""}
                     onChange={(e) => selectAnswer(question.id, e.target.value)}

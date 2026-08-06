@@ -77,7 +77,7 @@ export function ExaminationsPage() {
         cell: ({ row }) => (
           <div className="text-right">
             <Button variant="outline" size="sm" asChild>
-              <Link to={`/admin/categories/${row.original.categoryId}/exam`}>View</Link>
+              <Link to={`/admin/categories/${row.original.categoryId}/exam?exam=${row.original.id}`}>View</Link>
             </Button>
           </div>
         ),

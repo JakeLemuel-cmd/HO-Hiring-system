@@ -24,7 +24,7 @@ export const categorySchema = z.object({
   status: z.enum(["draft", "active", "closed", "archived"]).default("draft"),
 });
 
-export const questionTypeEnum = z.enum(["multiple_choice", "true_false", "fill_blank"]);
+export const questionTypeEnum = z.enum(["multiple_choice", "true_false", "fill_blank", "essay"]);
 
 export const questionOptionSchema = z.object({
   id: z.string(),
@@ -45,6 +45,7 @@ export const examQuestionSchema = z
     isRequired: z.boolean().default(true),
   })
   .superRefine((q, ctx) => {
+    if (q.type === "essay") return;
     if (q.type === "fill_blank") {
       if (!q.correctAnswerText.trim()) {
         ctx.addIssue({

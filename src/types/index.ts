@@ -45,7 +45,7 @@ export type CloseExamBehavior =
   | "allow_active_attempts_to_finish"
   | "submit_active_attempts_immediately";
 
-export type QuestionType = "multiple_choice" | "true_false" | "fill_blank";
+export type QuestionType = "multiple_choice" | "true_false" | "fill_blank" | "essay";
 
 export interface ExamQuestionOption {
   id: string;
@@ -134,6 +134,8 @@ export interface AttemptResultRow {
   totalPoints?: number;
   percentage?: number;
   submittedAt?: Timestamp;
+  needsReview?: boolean;
+  essayScores?: Record<string, number>;
   answers: Record<string, string>;
 }
 
@@ -191,6 +193,11 @@ export interface ExamAttemptDocument {
   resultReferenceNumber?: string;
   submissionReason?: "applicant_submitted" | "time_expired" | "exam_closed_by_staff";
   answers?: Record<string, string>;
+  needsReview?: boolean;
+  /** Manually assigned score per essay question, keyed by question id. */
+  essayScores?: Record<string, number>;
+  /** Per-part score breakdown (Part 1: Multiple Choice — 5/10, etc.), when available. */
+  parts?: { label: string; earned: number; total: number }[];
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

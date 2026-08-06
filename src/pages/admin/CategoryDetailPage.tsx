@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { subscribeToCategory, subscribeToCategoryStatistics } from "@/services/category.service";
 import type { CategoryDocument, CategoryStatistics } from "@/types";
 import { EMPTY_CATEGORY_STATISTICS } from "@/types";
-import { ExamBuilderTab } from "@/features/exams/ExamBuilderTab";
+import { ExamSetsTab } from "@/features/exams/ExamSetsTab";
 import { ApplicantsTab } from "@/features/applicants/ApplicantsTab";
 import { ResultsTab } from "@/features/applicants/ResultsTab";
 import { CategorySettingsTab } from "@/features/categories/CategorySettingsTab";
@@ -63,7 +63,7 @@ export function CategoryDetailPage() {
           <OverviewTab category={category} stats={stats} categoryId={categoryId} />
         </TabsContent>
         <TabsContent value="exam">
-          <ExamBuilderTab category={category} />
+          <ExamSetsTab category={category} />
         </TabsContent>
         <TabsContent value="applicants">
           <ApplicantsTab categoryId={categoryId} />
