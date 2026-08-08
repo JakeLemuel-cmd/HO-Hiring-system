@@ -78,6 +78,7 @@ create table if not exists exams (
   public_url text,
   question_count int not null default 0,
   total_points int not null default 0,
+  custom_directions jsonb not null default '{}'::jsonb,
   passing_score int not null default 70,
   availability_status text not null default 'draft'
     check (availability_status in ('draft', 'open', 'closed', 'scheduled', 'expired', 'archived')),

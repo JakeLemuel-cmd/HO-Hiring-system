@@ -58,6 +58,15 @@ export const QUESTION_TYPE_DIRECTIONS: Record<QuestionType, string> = {
     "DIRECTIONS: Read the prompt carefully. Write a well-organized essay that directly addresses all parts of the question, supporting your arguments with specific examples and evidence.",
 };
 
+/** Resolves the DIRECTIONS text to display for a part: the exam's custom override if
+ *  one was set for this question type, otherwise the built-in default. */
+export function getPartDirections(
+  type: QuestionType,
+  customDirections: Partial<Record<QuestionType, string>> | undefined
+): string {
+  return customDirections?.[type] ?? QUESTION_TYPE_DIRECTIONS[type];
+}
+
 /** Groups questions into parts by contiguous runs of the same type — each generated
  *  batch (e.g. 10 Multiple Choice, then 5 True or False) becomes its own numbered part. */
 export function groupIntoParts<T extends { type: QuestionType }>(questions: T[]): T[][] {

@@ -18,6 +18,12 @@ Deno.serve(async (req) => {
       .eq("exam_id", attempt.exam_id)
       .order("order", { ascending: true });
 
+    const { data: exam } = await admin
+      .from("exams")
+      .select("custom_directions")
+      .eq("id", attempt.exam_id)
+      .maybeSingle();
+
     return jsonResponse({
       questions: (questions ?? []).map((q) => ({
         id: q.id,
@@ -27,6 +33,7 @@ Deno.serve(async (req) => {
         options: q.options,
         points: q.points,
       })),
+      customDirections: exam?.custom_directions ?? {},
     });
   } catch (err) {
     return errorResponse(err instanceof Error ? err.message : "Unexpected error", 500);

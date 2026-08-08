@@ -1,5 +1,5 @@
 import { supabase, PUBLIC_APP_URL } from "@/lib/supabase";
-import type { ExamDocument, ExamListItem, ExamQuestion } from "@/types";
+import type { ExamDocument, ExamListItem, ExamQuestion, QuestionType } from "@/types";
 import { writeAuditLog } from "@/services/audit.service";
 
 function slugify(text: string): string {
@@ -27,6 +27,7 @@ function mapExam(row: any): ExamDocument {
     publicUrl: row.public_url ?? "",
     questionCount: row.question_count,
     totalPoints: row.total_points,
+    customDirections: row.custom_directions ?? {},
     passingScore: row.passing_score,
     availabilityStatus: row.availability_status,
     hasTimeLimit: row.has_time_limit,
@@ -183,13 +184,52 @@ function toQuestionRow(examId: string, question: ExamQuestion) {
   };
 }
 
+/** Recomputes exams.question_count/total_points from the live exam_questions rows, so
+ * the stored summary never goes stale after a published exam is edited. */
+export async function syncExamQuestionStats(examId: string) {
+  const { data, error } = await supabase.from("exam_questions").select("points").eq("exam_id", examId);
+  if (error) throw error;
+
+  const rows = data ?? [];
+  const { error: updateError } = await supabase
+    .from("exams")
+    .update({
+      question_count: rows.length,
+      total_points: rows.reduce((sum, row) => sum + (row.points ?? 0), 0),
+    })
+    .eq("id", examId);
+  if (updateError) throw updateError;
+}
+
 export async function saveQuestion(examId: string, question: ExamQuestion) {
   const { error } = await supabase.from("exam_questions").upsert(toQuestionRow(examId, question));
   if (error) throw error;
+  await syncExamQuestionStats(examId);
 }
 
 export async function updateExamTitle(examId: string, title: string) {
   const { error } = await supabase.from("exams").update({ title }).eq("id", examId);
+  if (error) throw error;
+}
+
+/** Sets a custom DIRECTIONS override for a question-type part, or clears it (reverting
+ *  to the built-in default) when `text` is null. */
+export async function updateExamPartDirections(examId: string, questionType: QuestionType, text: string | null) {
+  const { data: current, error: readError } = await supabase
+    .from("exams")
+    .select("custom_directions")
+    .eq("id", examId)
+    .single();
+  if (readError) throw readError;
+
+  const next = { ...(current?.custom_directions ?? {}) };
+  if (text === null) {
+    delete next[questionType];
+  } else {
+    next[questionType] = text;
+  }
+
+  const { error } = await supabase.from("exams").update({ custom_directions: next }).eq("id", examId);
   if (error) throw error;
 }
 
@@ -201,9 +241,10 @@ export async function updateExamTimeLimit(examId: string, hasTimeLimit: boolean,
   if (error) throw error;
 }
 
-export async function deleteQuestion(questionId: string) {
+export async function deleteQuestion(examId: string, questionId: string) {
   const { error } = await supabase.from("exam_questions").delete().eq("id", questionId);
   if (error) throw error;
+  await syncExamQuestionStats(examId);
 }
 
 /** Replaces every question on the exam with a freshly generated set, in one delete + one insert. */
@@ -211,7 +252,10 @@ export async function regenerateQuestions(examId: string, questions: ExamQuestio
   const { error: deleteError } = await supabase.from("exam_questions").delete().eq("exam_id", examId);
   if (deleteError) throw deleteError;
 
-  if (questions.length === 0) return [];
+  if (questions.length === 0) {
+    await syncExamQuestionStats(examId);
+    return [];
+  }
 
   const { data, error: insertError } = await supabase
     .from("exam_questions")
@@ -220,6 +264,7 @@ export async function regenerateQuestions(examId: string, questions: ExamQuestio
     .order("order", { ascending: true });
   if (insertError) throw insertError;
 
+  await syncExamQuestionStats(examId);
   return (data ?? []).map(mapQuestion);
 }
 
@@ -234,6 +279,7 @@ export async function appendQuestions(examId: string, questions: ExamQuestion[])
     .order("order", { ascending: true });
   if (error) throw error;
 
+  await syncExamQuestionStats(examId);
   return (data ?? []).map(mapQuestion);
 }
 

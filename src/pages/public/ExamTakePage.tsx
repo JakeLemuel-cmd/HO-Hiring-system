@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { invokeFunction } from "@/lib/supabase";
 import { saveExamAnswers, submitExamAttempt } from "@/services/applicant.service";
-import type { ExamAttemptDocument, SanitizedExamQuestion } from "@/types";
+import type { ExamAttemptDocument, QuestionType, SanitizedExamQuestion } from "@/types";
 import { LoadingSkeleton } from "@/components/common/LoadingSkeleton";
 import { ConfirmDialog } from "@/components/common/Misc";
 import { PublicExamHeader } from "@/components/common/PublicExamHeader";
@@ -11,7 +11,7 @@ import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { QUESTION_TYPE_LABELS, QUESTION_TYPE_DIRECTIONS, groupIntoParts } from "@/lib/examParts";
+import { QUESTION_TYPE_LABELS, getPartDirections, groupIntoParts } from "@/lib/examParts";
 
 function formatTime(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -27,6 +27,7 @@ export function ExamTakePage() {
 
   const [attempt, setAttempt] = useState<ExamAttemptDocument | null>(null);
   const [questions, setQuestions] = useState<SanitizedExamQuestion[]>([]);
+  const [customDirections, setCustomDirections] = useState<Partial<Record<QuestionType, string>>>({});
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [currentPage, setCurrentPage] = useState(0);
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
@@ -54,9 +55,13 @@ export function ExamTakePage() {
   // RLS blocks direct reads of exam_questions for non-staff users.
   useEffect(() => {
     if (!attemptId || questions.length > 0) return;
-    invokeFunction<{ questions: SanitizedExamQuestion[] }>("get-sanitized-exam-questions", { attemptId }).then(
-      (result) => setQuestions(result.questions)
-    );
+    invokeFunction<{ questions: SanitizedExamQuestion[]; customDirections: Partial<Record<QuestionType, string>> }>(
+      "get-sanitized-exam-questions",
+      { attemptId }
+    ).then((result) => {
+      setQuestions(result.questions);
+      setCustomDirections(result.customDirections ?? {});
+    });
   }, [attemptId, questions.length]);
 
   useEffect(() => {
@@ -185,7 +190,7 @@ export function ExamTakePage() {
 
         {pageType && (
           <p className="mb-3 rounded-md border border-border bg-muted/40 p-3 text-sm text-foreground">
-            {QUESTION_TYPE_DIRECTIONS[pageType]}
+            {getPartDirections(pageType, customDirections)}
           </p>
         )}
 

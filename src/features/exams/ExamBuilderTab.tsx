@@ -3,6 +3,7 @@ import { Trash2, GripVertical, Copy, ExternalLink, Download, Sparkles, Plus, Pen
 import QRCode from "qrcode";
 import { toast } from "sonner";
 import type { CategoryDocument, ExamDocument, ExamQuestion, QuestionType } from "@/types";
+import { cn } from "@/lib/utils";
 import { examBuilderSetupSchema } from "@/lib/validation";
 import { QUESTION_TYPE_LABELS, QUESTION_TYPE_DIRECTIONS, groupIntoParts } from "@/lib/examParts";
 import {
@@ -13,6 +14,8 @@ import {
   updateExamTitle,
   updateExamTimeLimit,
   updateExamSettings,
+  updateExamPartDirections,
+  syncExamQuestionStats,
   regenerateQuestions,
   appendQuestions,
   publishExam,
@@ -32,6 +35,40 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+
+interface QuestionIssues {
+  questionText?: boolean;
+  emptyOptionIds?: Set<string>;
+  notEnoughOptions?: boolean;
+  missingCorrectOption?: boolean;
+  missingCorrectAnswerText?: boolean;
+  message: string;
+}
+
+function getQuestionIssues(q: ExamQuestion): QuestionIssues | null {
+  if (!q.questionText.trim()) {
+    return { questionText: true, message: "Question text is required." };
+  }
+  if (q.type === "essay") return null;
+  if (q.type === "fill_blank") {
+    if (!q.correctAnswerText.trim()) {
+      return { missingCorrectAnswerText: true, message: "A correct answer is required." };
+    }
+    return null;
+  }
+  const emptyOptionIds = new Set(q.options.filter((o) => !o.text.trim()).map((o) => o.id));
+  if (q.options.length < 2 || emptyOptionIds.size > 0) {
+    return {
+      emptyOptionIds,
+      notEnoughOptions: q.options.length < 2,
+      message: "At least two non-empty answer options are required.",
+    };
+  }
+  if (!q.options.some((o) => o.id === q.correctOptionId)) {
+    return { missingCorrectOption: true, message: "Select the correct answer." };
+  }
+  return null;
+}
 
 function newQuestion(order: number, type: QuestionType): ExamQuestion {
   if (type === "true_false") {
@@ -89,7 +126,7 @@ export function ExamBuilderTab({
   const { profile } = useAuth();
   const [exam, setExam] = useState<ExamDocument | null>(null);
   const [questions, setQuestions] = useState<ExamQuestion[]>([]);
-  const [publishError, setPublishError] = useState<string | null>(null);
+  const [validationAttempted, setValidationAttempted] = useState(false);
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
   const [closeReason, setCloseReason] = useState("");
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
@@ -115,6 +152,7 @@ export function ExamBuilderTab({
 
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [deleteQuestionId, setDeleteQuestionId] = useState<string | null>(null);
 
   const [editMode, setEditMode] = useState(false);
 
@@ -194,6 +232,13 @@ export function ExamBuilderTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questions.length]);
 
+  // Keeps exams.question_count/total_points in sync with the live exam_questions rows —
+  // covers exams published before auto-sync landed, or edited outside this component.
+  useEffect(() => {
+    if (!examId || !exam || exam.questionCount === questions.length) return;
+    syncExamQuestionStats(examId).catch(() => {});
+  }, [examId, exam, questions.length]);
+
   if (!examId || !exam) return null;
 
   const isOpenForEditing = exam.availabilityStatus === "draft";
@@ -206,8 +251,19 @@ export function ExamBuilderTab({
     await saveQuestion(examId!, q);
   }
 
-  async function removeQuestion(id: string) {
-    await deleteQuestion(id);
+  async function handleConfirmDeleteQuestion() {
+    if (!deleteQuestionId) return;
+    const id = deleteQuestionId;
+    const previous = questions;
+    setQuestions((prev) => prev.filter((q) => q.id !== id));
+    setDeleteQuestionId(null);
+    try {
+      await deleteQuestion(examId!, id);
+      toast.success("Question deleted.");
+    } catch (err) {
+      setQuestions(previous);
+      toast.error(err instanceof Error ? err.message : "Failed to delete question.");
+    }
   }
 
   async function handleGenerate() {
@@ -296,34 +352,23 @@ export function ExamBuilderTab({
   }
 
   async function handlePublish() {
-    setPublishError(null);
+    setValidationAttempted(true);
     if (questions.length === 0) {
-      setPublishError("Generate at least one question before publishing.");
+      toast.error("Generate at least one question before publishing.");
       return;
     }
-    for (let i = 0; i < questions.length; i++) {
-      const q = questions[i];
-      const displayNumber = i + 1;
-      if (!q.questionText.trim()) {
-        setPublishError(`Question ${displayNumber} is missing question text.`);
-        return;
-      }
-      if (q.type === "essay") continue;
-      if (q.type === "fill_blank") {
-        if (!q.correctAnswerText.trim()) {
-          setPublishError(`Question ${displayNumber} needs a correct answer entered.`);
-          return;
-        }
-        continue;
-      }
-      if (q.options.length < 2 || q.options.some((o) => !o.text.trim())) {
-        setPublishError(`Question ${displayNumber} needs at least two non-empty answer options.`);
-        return;
-      }
-      if (!q.options.some((o) => o.id === q.correctOptionId)) {
-        setPublishError(`Question ${displayNumber} needs a correct answer selected.`);
-        return;
-      }
+    const invalidNumbers: number[] = [];
+    questions.forEach((q, i) => {
+      if (getQuestionIssues(q)) invalidNumbers.push(i + 1);
+    });
+    if (invalidNumbers.length > 0) {
+      toast.error(
+        `Question${invalidNumbers.length === 1 ? "" : "s"} ${invalidNumbers.join(", ")} ${
+          invalidNumbers.length === 1 ? "has" : "have"
+        } a blank question, option, or answer.`,
+        { description: "Fix the highlighted questions below before publishing." }
+      );
+      return;
     }
     if (!profile) return;
     await publishExam(category.id, examId!, category.name, questions, profile.uid, `${profile.firstName} ${profile.lastName}`);
@@ -611,11 +656,6 @@ export function ExamBuilderTab({
       {showQuestionsCard && (
         <Card>
           <CardContent className="pt-6">
-            {publishError && (
-              <Alert variant="destructive" className="mb-3">
-                <AlertDescription>{publishError}</AlertDescription>
-              </Alert>
-            )}
 
             <div className="space-y-6">
               {(() => {
@@ -626,7 +666,12 @@ export function ExamBuilderTab({
                       <p className="text-sm font-semibold text-foreground">
                         Part {i + 1}: {QUESTION_TYPE_LABELS[part[0].type]}
                       </p>
-                      <p className="mt-1 text-sm text-muted-foreground">{QUESTION_TYPE_DIRECTIONS[part[0].type]}</p>
+                      <PartDirections
+                        examId={examId!}
+                        type={part[0].type}
+                        customText={exam.customDirections[part[0].type]}
+                        disabled={!canEditFields}
+                      />
                     </div>
                     {part.map((q) => {
                       displayNumber += 1;
@@ -636,8 +681,9 @@ export function ExamBuilderTab({
                           question={q}
                           displayNumber={displayNumber}
                           disabled={!canEditFields}
+                          showValidation={validationAttempted}
                           onChange={updateQuestion}
-                          onDelete={() => removeQuestion(q.id)}
+                          onDelete={() => setDeleteQuestionId(q.id)}
                         />
                       );
                     })}
@@ -681,6 +727,16 @@ export function ExamBuilderTab({
         danger
         onCancel={() => setResetDialogOpen(false)}
         onConfirm={handleReset}
+      />
+
+      <ConfirmDialog
+        open={deleteQuestionId !== null}
+        title="Delete Question?"
+        description="This will permanently delete this question. This cannot be undone."
+        confirmLabel="Delete Question"
+        danger
+        onCancel={() => setDeleteQuestionId(null)}
+        onConfirm={handleConfirmDeleteQuestion}
       />
 
       <Dialog open={addMoreOpen} onOpenChange={setAddMoreOpen}>
@@ -734,24 +790,119 @@ export function ExamBuilderTab({
   );
 }
 
+function PartDirections({
+  examId,
+  type,
+  customText,
+  disabled,
+}: {
+  examId: string;
+  type: QuestionType;
+  customText: string | undefined;
+  disabled: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(customText ?? QUESTION_TYPE_DIRECTIONS[type]);
+  const [saving, setSaving] = useState(false);
+  const isCustom = customText !== undefined;
+
+  if (editing) {
+    return (
+      <div className="mt-2 space-y-2">
+        <Textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={3} className="bg-background" />
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            disabled={saving || !draft.trim()}
+            onClick={async () => {
+              setSaving(true);
+              try {
+                await updateExamPartDirections(examId, type, draft.trim());
+                setEditing(false);
+              } catch {
+                toast.error("Failed to save directions.");
+              } finally {
+                setSaving(false);
+              }
+            }}
+          >
+            {saving ? "Saving..." : "Save"}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={saving}
+            onClick={() => {
+              setDraft(customText ?? QUESTION_TYPE_DIRECTIONS[type]);
+              setEditing(false);
+            }}
+          >
+            Cancel
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-1 flex items-start justify-between gap-3">
+      <p className="text-sm text-muted-foreground">{customText ?? QUESTION_TYPE_DIRECTIONS[type]}</p>
+      {!disabled && (
+        <div className="flex shrink-0 gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-auto px-2 py-1 text-xs"
+            onClick={() => {
+              setDraft(customText ?? QUESTION_TYPE_DIRECTIONS[type]);
+              setEditing(true);
+            }}
+          >
+            Customize
+          </Button>
+          {isCustom && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-auto px-2 py-1 text-xs"
+              onClick={async () => {
+                try {
+                  await updateExamPartDirections(examId, type, null);
+                } catch {
+                  toast.error("Failed to reset directions.");
+                }
+              }}
+            >
+              Use Default
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const OPTION_LETTERS = ["A", "B", "C", "D", "E", "F"];
 
 function QuestionEditor({
   question,
   displayNumber,
   disabled,
+  showValidation,
   onChange,
   onDelete,
 }: {
   question: ExamQuestion;
   displayNumber: number;
   disabled: boolean;
+  showValidation: boolean;
   onChange: (q: ExamQuestion) => void;
   onDelete: () => void;
 }) {
   const [local, setLocal] = useState(question);
   const pendingRef = useRef<ExamQuestion | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const issues = showValidation ? getQuestionIssues(local) : null;
 
   // Only resync from the server copy when a different question loads in — not on every
   // realtime reload — otherwise an in-flight keystroke can be overwritten by a stale fetch.
@@ -789,7 +940,12 @@ function QuestionEditor({
   }
 
   return (
-    <div className="rounded-md border border-border p-4">
+    <div
+      className={cn(
+        "rounded-md border p-4",
+        issues ? "border-destructive bg-destructive/5" : "border-border"
+      )}
+    >
       <div className="mb-2 flex items-center justify-between">
         <span className="flex items-center gap-2 text-sm font-medium text-foreground">
           <GripVertical className="h-4 w-4 text-muted-foreground" /> Question {displayNumber}
@@ -803,6 +959,9 @@ function QuestionEditor({
           </Button>
         )}
       </div>
+      {issues && (
+        <p className="mb-2 text-xs font-medium text-destructive">{issues.message}</p>
+      )}
       <Textarea
         disabled={disabled}
         value={local.questionText}
@@ -810,6 +969,7 @@ function QuestionEditor({
         onBlur={flush}
         placeholder="Enter question text"
         rows={2}
+        className={cn(issues?.questionText && "border-destructive focus-visible:ring-destructive")}
       />
 
       {local.type === "essay" ? (
@@ -830,12 +990,14 @@ function QuestionEditor({
             onChange={(e) => commit({ ...local, correctAnswerText: e.target.value })}
             onBlur={flush}
             placeholder="Enter the correct word or phrase"
-            className="h-8"
+            className={cn("h-8", issues?.missingCorrectAnswerText && "border-destructive focus-visible:ring-destructive")}
           />
         </div>
       ) : local.type === "true_false" ? (
         <div className="mt-3 space-y-1.5">
-          <Label className="text-xs text-muted-foreground">Correct Answer</Label>
+          <Label className={cn("text-xs text-muted-foreground", issues?.missingCorrectOption && "text-destructive")}>
+            Correct Answer
+          </Label>
           <RadioGroup
             className="flex items-center gap-6"
             value={local.correctOptionId}
@@ -854,7 +1016,9 @@ function QuestionEditor({
         </div>
       ) : (
         <div className="mt-3 space-y-1.5">
-          <Label className="text-xs text-muted-foreground">Options — select the correct answer</Label>
+          <Label className={cn("text-xs text-muted-foreground", issues?.missingCorrectOption && "text-destructive")}>
+            Options — select the correct answer
+          </Label>
           <RadioGroup
             value={local.correctOptionId}
             onValueChange={(id) => {
@@ -877,8 +1041,11 @@ function QuestionEditor({
                     commit({ ...local, options });
                   }}
                   onBlur={flush}
+                  className={cn(
+                    "h-8 flex-1",
+                    issues?.emptyOptionIds?.has(opt.id) && "border-destructive focus-visible:ring-destructive"
+                  )}
                   placeholder={`Option ${OPTION_LETTERS[idx] ?? idx + 1}`}
-                  className="h-8 flex-1"
                 />
               </div>
             ))}

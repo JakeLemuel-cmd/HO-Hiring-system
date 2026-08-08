@@ -88,6 +88,9 @@ export interface ExamDocument {
   questionCount: number;
   totalPoints: number;
   passingScore: number;
+  /** Per-part DIRECTIONS override, keyed by question type. Missing keys fall back to the
+   *  built-in default in QUESTION_TYPE_DIRECTIONS. */
+  customDirections: Partial<Record<QuestionType, string>>;
 
   availabilityStatus: ExamAvailabilityStatus;
 
