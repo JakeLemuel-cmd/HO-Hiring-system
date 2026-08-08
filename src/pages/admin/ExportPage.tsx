@@ -56,9 +56,13 @@ function mapApplicant(row: any): ApplicantDocument {
   };
 }
 
+const ALL_EXAMS = "__all__";
+
 export function ExportPage() {
   const [categories, setCategories] = useState<CategoryDocument[]>([]);
   const [categoryId, setCategoryId] = useState<string>("");
+  const [exams, setExams] = useState<{ id: string; title: string }[]>([]);
+  const [examId, setExamId] = useState<string>(ALL_EXAMS);
   const [exporting, setExporting] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
 
@@ -68,16 +72,33 @@ export function ExportPage() {
 
   const category = categories.find((c) => c.id === categoryId) ?? null;
 
+  useEffect(() => {
+    setExamId(ALL_EXAMS);
+    if (!category) {
+      setExams([]);
+      return;
+    }
+    supabase
+      .from("exams")
+      .select("id, title")
+      .eq("category_id", category.id)
+      .then(({ data }) => setExams((data ?? []).map((e) => ({ id: e.id, title: e.title }))));
+  }, [category]);
+
   async function handleExport() {
     if (!category) return;
     setExporting(true);
     setProgress(null);
     try {
-      const { data: attemptRows } = await supabase
+      let query = supabase
         .from("exam_attempts")
         .select("*")
         .eq("category_id", category.id)
         .eq("status", "completed");
+      if (examId !== ALL_EXAMS) {
+        query = query.eq("exam_id", examId);
+      }
+      const { data: attemptRows } = await query;
       // Attempts awaiting manual essay grading have no final result yet — exclude them so the
       // export doesn't mislabel a pending result as "Failed".
       const attempts = (attemptRows ?? []).map(mapAttempt).filter((a) => !a.needsReview);
@@ -163,7 +184,8 @@ export function ExportPage() {
       }
 
       const zipBlob = await zip.generateAsync({ type: "blob" });
-      const zipFilename = `${category.name}.zip`;
+      const selectedExamTitle = examId !== ALL_EXAMS ? exams.find((e) => e.id === examId)?.title : undefined;
+      const zipFilename = `${category.name}${selectedExamTitle ? ` - ${selectedExamTitle}` : ""}.zip`;
       const url = URL.createObjectURL(zipBlob);
       const a = document.createElement("a");
       a.href = url;
@@ -210,13 +232,34 @@ export function ExportPage() {
                 </Select>
               </div>
 
+              {category && exams.length > 1 && (
+                <div className="space-y-1.5">
+                  <Label>Exam</Label>
+                  <Select value={examId} onValueChange={setExamId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select an exam" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL_EXAMS}>All Exams</SelectItem>
+                      {exams.map((e) => (
+                        <SelectItem key={e.id} value={e.id}>
+                          {e.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
               <Button onClick={handleExport} disabled={!category || exporting} className="w-full">
                 <Download className="h-4 w-4" />
                 {exporting
                   ? progress
                     ? `Exporting ${progress.done}/${progress.total}...`
                     : "Preparing export..."
-                  : "Export All Results (ZIP)"}
+                  : examId !== ALL_EXAMS
+                    ? "Export Exam Results (ZIP)"
+                    : "Export All Results (ZIP)"}
               </Button>
             </>
           )}

@@ -2,6 +2,7 @@ import { forwardRef, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useNavigate, useParams } from "react-router-dom";
+import { Lock, CalendarClock, FileClock, ShieldOff, type LucideIcon } from "lucide-react";
 import { applicantRegistrationSchema, type ApplicantRegistrationInput } from "@/lib/validation";
 import { getPublicExamInformation, registerAndStartAttempt } from "@/services/applicant.service";
 import type { PublicExamInformation } from "@/types";
@@ -55,6 +56,7 @@ export function ExamRegisterPage() {
   if (info.availabilityStatus === "closed") {
     return (
       <CenteredMessage
+        icon={Lock}
         title="This examination is currently closed."
         body="The organization is not accepting new responses for this examination. Please contact the recruitment team for more information."
       />
@@ -63,6 +65,7 @@ export function ExamRegisterPage() {
   if (info.availabilityStatus === "scheduled") {
     return (
       <CenteredMessage
+        icon={CalendarClock}
         title="This examination has not opened yet."
         body={info.openingDate ? `It will open on ${new Date(info.openingDate).toLocaleString()}.` : "Please check back later."}
       />
@@ -71,13 +74,14 @@ export function ExamRegisterPage() {
   if (info.availabilityStatus === "expired" || info.availabilityStatus === "archived") {
     return (
       <CenteredMessage
+        icon={ShieldOff}
         title="This examination is no longer accepting responses."
         body="Please contact the recruitment team for more information."
       />
     );
   }
   if (info.availabilityStatus === "draft") {
-    return <CenteredMessage title="This examination is not yet published." body="Please check back later." />;
+    return <CenteredMessage icon={FileClock} title="This examination is not yet published." body="Please check back later." />;
   }
 
   async function onSubmit(values: ApplicantRegistrationInput) {
@@ -173,13 +177,18 @@ const Field = forwardRef<
 });
 Field.displayName = "Field";
 
-function CenteredMessage({ title, body }: { title: string; body: string }) {
+function CenteredMessage({ icon: Icon, title, body }: { icon?: LucideIcon; title: string; body: string }) {
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
-      <Card className="max-w-md text-center">
-        <CardContent className="pt-6">
+      <Card className="w-full max-w-md text-center">
+        <CardContent className="flex flex-col items-center pt-8 pb-8">
+          {Icon && (
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+              <Icon className="h-6 w-6 text-muted-foreground" />
+            </div>
+          )}
           <h1 className="text-lg font-semibold text-foreground">{title}</h1>
-          <p className="mt-2 text-sm text-muted-foreground">{body}</p>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{body}</p>
         </CardContent>
       </Card>
     </div>
